@@ -1,0 +1,13 @@
+{
+  "name": "dissemination-digest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A one-shot dissemination opportunity digest for creative practitioners.",
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "deploy": "wrangler pages deploy public --project-name=dissemination-digest"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

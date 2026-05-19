@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dissemination Digest — opportunities for your creative or startup project</title>
+<meta name="description" content="Tell us what you're working on. A research assistant builds you a curated digest of festivals, grants, residencies, accelerators or pitch competitions — whichever fits.">
+<style>
+  :root{
+    --bg:#fdf8f3; --ink:#1f1a17; --muted:#6b6259;
+    --accent:#c2410c; --soft:#fef3ec; --card:#ffffff;
+    --border:#ece2d6; --err:#a8261b;
+    /* used for prominent dark surfaces (buttons, logo, highlight, selected chip) */
+    --solid:#1f1a17; --solid-fg:#ffffff;
+    --field:#ffffff;
+  }
+  body{transition:background-color .25s ease, color .25s ease}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;max-width:1240px;margin:0 auto;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600}
+  .brand .logo{width:34px;height:34px;border-radius:9px;background:var(--solid);color:var(--solid-fg);display:grid;place-items:center;font-size:18px;}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--muted);}
+  .pill b{color:var(--ink);font-weight:600}
+  .top-links{display:flex;align-items:center;gap:18px;font-size:14px;color:var(--muted)}
+  .bmc-top{display:inline-flex;align-items:center;gap:8px;background:var(--card);color:var(--ink);text-decoration:none;font-weight:600;border:1.5px solid var(--ink);border-radius:10px;padding:8px 14px;font-size:14px;}
+  .bmc-top:hover{background:var(--soft)}
+
+  .hero{position:relative;max-width:1100px;margin:0 auto;padding:48px 28px 80px;text-align:center;}
+  /* keep all text content above the floating example cards */
+  .hero h1,
+  .hero .lede,
+  .hero .cta-row,
+  .hero .cta-sub,
+  .mode-toggle-wrap{position:relative;z-index:2}
+  .mode-toggle-wrap{display:flex;justify-content:center;margin-bottom:26px}
+  .hero h1{font-size:clamp(32px,5.4vw,60px);font-weight:700;letter-spacing:-.02em;line-height:1.05;margin:0 auto 18px;max-width:18ch;}
+  .hero h1 .hl{
+    background:var(--solid);color:var(--solid-fg);
+    padding:.05em .3em;border-radius:12px;display:inline-block;
+    transform:rotate(-2.5deg);transform-origin:center;
+    box-shadow:0 8px 24px -14px rgba(0,0,0,.35);
+  }
+  .hero .lede{font-size:18px;color:var(--muted);max-width:46ch;margin:0 auto 28px;}
+  .cta-row{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;}
+  .cta-row .start{background:var(--solid);color:var(--solid-fg);border:0;font:inherit;font-weight:600;font-size:16px;padding:14px 24px;border-radius:12px;cursor:pointer;transition:transform .05s, filter .15s;}
+  .cta-row .start:hover{filter:brightness(.92)}
+  .cta-row .start:active{transform:translateY(1px)}
+  .cta-sub{font-size:13px;color:var(--muted);margin-top:14px}
+
+  /* ---------- mode toggle (segmented) ---------- */
+  .mode-toggle{
+    display:inline-flex;background:var(--card);border:1px solid var(--border);
+    border-radius:999px;padding:3px;gap:2px;position:relative;
+  }
+  .mode-toggle button{
+    background:transparent;border:0;font:inherit;font-size:13px;font-weight:600;
+    color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s, background .15s;
+  }
+  .mode-toggle button.on{background:var(--solid);color:var(--solid-fg)}
+  .mode-toggle button:not(.on):hover{color:var(--ink)}
+
+  /* ---------- mode-aware palette ---------- */
+  body[data-mode="startup"]{
+    --bg:#0e0e14;
+    --ink:#f3eee7;
+    --muted:#9aa0ad;
+    --card:#181820;
+    --border:#2a2a35;
+    --accent:#7aa2ff;      /* startup blue (light variant for dark bg) */
+    --soft:#1e2538;
+    --err:#ff8a80;
+    --solid:#7aa2ff;       /* primary surfaces use accent in dark mode */
+    --solid-fg:#0b0b11;
+    --field:#13131b;
+  }
+  body[data-mode="creative"] .float[data-modes="startup"]{display:none}
+  body[data-mode="startup"] .float[data-modes="creative"]{display:none}
+
+  .floats{position:absolute;inset:0;pointer-events:none}
+  .float{position:absolute;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 18px;box-shadow:0 12px 32px -18px rgba(0,0,0,.45);font-size:13px;color:var(--ink);min-width:170px;}
+  .float .ftype{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .float .fname{font-weight:700;line-height:1.25;margin-bottom:8px}
+  .float .fmeta{font-size:12px;color:var(--muted)}
+  .float .deadline{display:inline-block;background:var(--soft);color:var(--accent);font-weight:600;border-radius:6px;padding:2px 7px;font-size:11px;margin-top:8px}
+  .float.f1{left:6%;top:30px;transform:rotate(-5deg)}
+  .float.f2{right:5%;top:10px;transform:rotate(4deg)}
+  .float.f3{right:10%;bottom:30px;transform:rotate(-3deg)}
+  .spark{position:absolute;font-size:22px;color:var(--ink);opacity:.45}
+  .spark.s1{left:42%;top:54%}
+  .spark.s2{right:32%;top:36%}
+  @media (max-width:880px){.float,.spark{display:none}}
+
+  .wizard{max-width:640px;margin:0 auto;padding:32px 20px 64px;display:none}
+  .wizard.show{display:block}
+  .progress{display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:13px;color:var(--muted);}
+  .progress .bars{display:flex;gap:6px;flex:1}
+  .progress .bar{flex:1;height:5px;border-radius:3px;background:var(--border)}
+  .progress .bar.on{background:var(--ink)}
+  .progress .step-n{font-variant-numeric:tabular-nums}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:0 1px 0 rgba(0,0,0,.02),0 8px 24px -18px rgba(31,26,23,.12);}
+  .step h2{font-size:24px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+  .step .sub{color:var(--muted);font-size:15px;margin:0 0 22px}
+
+  fieldset{border:0;padding:0;margin:0 0 4px}
+  legend{font-weight:600;font-size:15px;margin-bottom:8px;padding:0}
+  label.lbl{display:block;font-size:14px;font-weight:500;margin-bottom:6px}
+  .field{margin-bottom:18px}
+  .help{font-size:13px;color:var(--muted);margin:-2px 0 6px}
+  input[type=text],input[type=email],select,textarea{
+    width:100%;font:inherit;color:var(--ink);background:var(--field);
+    border:1px solid var(--border);border-radius:10px;padding:11px 13px;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  textarea{min-height:90px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,65,12,.14);}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:520px){.grid-2{grid-template-columns:1fr}}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{position:relative}
+  .chip input{position:absolute;opacity:0;pointer-events:none}
+  .chip span{display:inline-block;padding:8px 13px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);color:var(--ink);font-size:14px;cursor:pointer;transition:all .12s;}
+  .chip input:checked + span{background:var(--solid);color:var(--solid-fg);border-color:var(--solid);}
+  .chip span:hover{border-color:var(--ink)}
+
+  .honey{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+  .nav{display:flex;align-items:center;justify-content:space-between;margin-top:22px;gap:10px}
+  button.primary{background:var(--solid);color:var(--solid-fg);border:0;padding:12px 22px;border-radius:11px;font:inherit;font-weight:600;cursor:pointer;transition:filter .15s,transform .05s;}
+  button.primary:hover{filter:brightness(.92)}
+  button.primary:active{transform:translateY(1px)}
+  button.primary[disabled]{opacity:.65;cursor:wait}
+  button.ghost{background:transparent;border:0;color:var(--muted);font:inherit;cursor:pointer;padding:10px 6px;border-radius:9px;}
+  button.ghost:hover{color:var(--ink)}
+  .spinner{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;opacity:.9;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .error{background:#fdecea;border:1px solid #f3c2bd;color:var(--err);border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:14px;display:none;}
+  body[data-mode="startup"] .error{background:#2a1014;border-color:#5a2a30;color:#ff8a80}
+
+  /* ---------- generating screen ---------- */
+  .generating{display:none;max-width:560px;margin:0 auto;padding:64px 20px;text-align:center}
+  .generating.show{display:block}
+  .gen-orb{
+    width:80px;height:80px;border-radius:50%;margin:0 auto 24px;
+    background:conic-gradient(from 0deg, var(--accent), var(--ink), var(--accent));
+    animation:spin 2.4s linear infinite;
+    mask:radial-gradient(circle at center, transparent 50%, #000 52%);
+    -webkit-mask:radial-gradient(circle at center, transparent 50%, #000 52%);
+  }
+  .gen-title{font-size:24px;font-weight:700;margin:0 0 8px}
+  .gen-tip{color:var(--muted);min-height:48px;font-size:15px}
+  .gen-meta{font-size:13px;color:var(--muted);margin-top:24px}
+
+  /* ---------- gate (email + tiers) ---------- */
+  .gate{display:none;max-width:780px;margin:0 auto;padding:32px 20px 64px}
+  .gate.show{display:block}
+  .gate h2{font-size:26px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em}
+  .gate .sub{color:var(--muted);margin:0 0 22px}
+  .gate .email-field{margin-bottom:24px}
+  .gate .email-field label{display:block;font-size:14px;font-weight:500;margin-bottom:6px}
+
+  /* free tier — its own prominent row */
+  .free-tier{
+    position:relative;display:flex;align-items:center;gap:16px;
+    background:var(--card);border:2px solid var(--accent);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);
+    border-radius:14px;padding:18px 20px;cursor:pointer;
+    margin-bottom:28px;text-align:left;width:100%;font:inherit;color:var(--ink);
+  }
+  .free-tier .emoji{font-size:32px;line-height:1}
+  .free-tier .body{flex:1}
+  .free-tier .title-row{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .free-tier .title{font-size:16px;font-weight:700}
+  .free-tier .free-badge{
+    background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+    padding:3px 7px;border-radius:999px;letter-spacing:.04em;
+  }
+  .free-tier .desc{font-size:13px;color:var(--muted)}
+  .free-tier .price{font-size:18px;font-weight:700;color:var(--ink)}
+
+  /* upsell divider + heading */
+  .recurring-intro{margin-bottom:14px}
+  .recurring-intro h3{font-size:18px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em}
+  .recurring-intro p{font-size:14px;color:var(--muted);margin:0}
+
+  .tiers{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:22px;
+  }
+  @media (max-width:780px){.tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media (max-width:420px){.tiers{grid-template-columns:1fr}}
+  .tier{
+    position:relative;background:var(--card);border:2px solid var(--border);
+    border-radius:14px;padding:18px 14px;cursor:pointer;text-align:center;
+    transition:border-color .15s, transform .08s, box-shadow .15s;
+    display:flex;flex-direction:column;gap:6px;
+  }
+  .tier:hover{border-color:var(--ink)}
+  .tier.locked{cursor:not-allowed;opacity:.78}
+  .tier.locked:hover{border-color:var(--border)}
+  .tier .emoji{font-size:28px;line-height:1}
+  .tier .cadence{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .tier .price{font-size:18px;font-weight:700;color:var(--ink)}
+  .tier .term{font-size:11px;color:var(--muted);font-style:italic;margin-top:-2px}
+  .tier .label{font-size:12px;color:var(--muted)}
+  .tier .lock-badge{
+    position:absolute;top:8px;right:8px;background:var(--soft);color:var(--accent);
+    font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;letter-spacing:.04em;
+  }
+  .gate-msg{
+    display:none;background:var(--soft);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;font-size:14px;color:var(--ink);margin-bottom:18px;
+  }
+  .gate-msg.show{display:block}
+  .gate-msg a{color:var(--accent);font-weight:600}
+
+  /* ---------- result screen ---------- */
+  .result{display:none;max-width:760px;margin:0 auto;padding:32px 20px 80px}
+  .result.show{display:block}
+  .result h2{font-size:26px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em}
+  .result .sub{color:var(--muted);margin:0 0 18px}
+  .result-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+  .result-actions button{background:var(--card);color:var(--ink);border:1.5px solid var(--ink);border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;font-size:14px;cursor:pointer;}
+  .result-actions button:hover{background:var(--soft)}
+  .result-actions button.copied{background:var(--solid);color:var(--solid-fg)}
+  .preview{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;box-shadow:0 1px 0 rgba(0,0,0,.02),0 8px 24px -18px rgba(0,0,0,.35);}
+  .preview h2,.preview h3{margin-top:1.2em}
+  .preview a{color:var(--accent)}
+  .restart{display:inline-block;margin-top:22px;color:var(--muted);background:none;border:0;cursor:pointer;font:inherit;text-decoration:underline}
+
+  footer{max-width:900px;margin:0 auto;padding:32px 28px 56px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--border);}
+  footer p{margin:0 0 14px}
+  .bmc{display:inline-flex;align-items:center;gap:8px;background:#ffdd00;color:#0d0c22;text-decoration:none;font-weight:600;border-radius:11px;padding:11px 18px;border:1px solid #e6c800;}
+  .bmc:hover{background:#ffe53d}
+  .req{color:var(--accent)}
+</style>
+</head>
+<body data-mode="creative">
+
+<div class="topbar">
+  <div class="brand">
+    <span class="logo">✦</span>
+    <span>Dissemination Digest</span>
+  </div>
+  <div class="top-links">
+    <span class="pill" id="topPill">⚡ <b>Free</b> · instant result</span>
+    <a class="bmc-top" href="https://buymeacoffee.com/taniaolarte" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+  </div>
+</div>
+
+<section class="hero" id="hero">
+  <div class="floats" aria-hidden="true">
+    <!-- creative set -->
+    <div class="float f1" data-modes="creative">
+      <div class="ftype">Festival</div>
+      <div class="fname">Ars Electronica</div>
+      <div class="fmeta">Linz · digital art</div>
+      <span class="deadline">Closes Mar 6</span>
+    </div>
+    <div class="float f2" data-modes="creative">
+      <div class="ftype">Grant</div>
+      <div class="fname">Australia Council Creative Fund</div>
+      <div class="fmeta">AU · up to $30k</div>
+      <span class="deadline">Opens Apr 2</span>
+    </div>
+    <div class="float f3" data-modes="creative">
+      <div class="ftype">Residency</div>
+      <div class="fname">Rupert · Vilnius</div>
+      <div class="fmeta">Lithuania · 3 months</div>
+      <span class="deadline">Rolling</span>
+    </div>
+    <!-- startup set -->
+    <div class="float f1" data-modes="startup">
+      <div class="ftype">Accelerator</div>
+      <div class="fname">On Deck Founders</div>
+      <div class="fmeta">Remote · 10 weeks</div>
+      <span class="deadline">Apps open</span>
+    </div>
+    <div class="float f2" data-modes="startup">
+      <div class="ftype">Grant</div>
+      <div class="fname">Climate Tech R&amp;D — Breakthrough</div>
+      <div class="fmeta">Global · up to $250k</div>
+      <span class="deadline">Closes May 15</span>
+    </div>
+    <div class="float f3" data-modes="startup">
+      <div class="ftype">Pitch comp</div>
+      <div class="fname">TechCrunch Disrupt Startup Battlefield</div>
+      <div class="fmeta">SF · $100k prize</div>
+      <span class="deadline">Rolling</span>
+    </div>
+    <span class="spark s1">✦</span>
+    <span class="spark s2">✦</span>
+  </div>
+
+  <div class="mode-toggle-wrap">
+    <div class="mode-toggle" id="modeToggle" role="tablist" aria-label="Mode">
+      <button type="button" data-mode="creative" class="on" role="tab" aria-selected="true">🎨 Creative</button>
+      <button type="button" data-mode="startup" role="tab" aria-selected="false">🚀 Startup</button>
+    </div>
+  </div>
+
+  <h1 id="heroH1">Find <span class="hl" id="heroHl">festivals, grants &amp; residencies</span> for your project.</h1>
+  <p class="lede" id="heroLede">Tell us what you're making. A research assistant scours the web and builds a curated digest you can read right here.</p>
+  <div class="cta-row">
+    <button class="start" id="startBtn" type="button">Get my digest →</button>
+  </div>
+  <div class="cta-sub">Takes about 90 seconds. No account. Nothing stored.</div>
+</section>
+
+<section class="wizard" id="wizard" aria-live="polite">
+  <div class="progress" id="progress">
+    <button class="ghost" id="backBtn" type="button" aria-label="Back" style="padding:4px 8px">← Back</button>
+    <div class="bars">
+      <div class="bar on"></div><div class="bar"></div><div class="bar"></div>
+    </div>
+    <span class="step-n" id="stepN">1 / 3</span>
+  </div>
+
+  <form id="form" autocomplete="on" novalidate>
+    <div class="error" id="error" role="alert"></div>
+
+    <!-- STEP 1 — Your project -->
+    <div class="step card" data-step="1">
+      <h2 id="step1Title">What are you making?</h2>
+      <p class="sub" id="step1Sub">Start with the basics.</p>
+
+      <div class="field">
+        <label class="lbl" for="projectName"><span id="projectNameLbl">Project name</span> <span class="req">*</span></label>
+        <input id="projectName" name="projectName" type="text" placeholder='e.g. "Library of Emotions"' required>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="projectDescription">Describe it in a sentence or two <span class="req">*</span></label>
+        <textarea id="projectDescription" name="projectDescription" placeholder="What is it, who is it for?" required></textarea>
+      </div>
+
+      <div class="nav">
+        <span></span>
+        <button class="primary" type="button" data-next="1">Continue →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2 — You -->
+    <div class="step card" data-step="2" hidden>
+      <h2>About you</h2>
+      <p class="sub">So we can filter for eligibility.</p>
+
+      <div class="grid-2">
+        <div class="field">
+          <label class="lbl" for="name">Your name <span class="req">*</span></label>
+          <input id="name" name="name" type="text" required>
+        </div>
+        <div class="field">
+          <label class="lbl" for="career"><span id="careerLbl">Career stage</span> <span class="req">*</span></label>
+          <select id="career" name="career" required>
+            <option value="">Choose…</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl" for="location">Location <span class="req">*</span></label>
+        <input id="location" name="location" type="text" placeholder="e.g. Melbourne, Australia" required>
+        <p class="help">Include your country.</p>
+      </div>
+
+      <div class="field">
+        <legend style="margin-bottom:10px"><span id="disciplinesLbl">Disciplines</span> <span class="req">*</span> <span class="help" style="font-weight:400">— pick everything that fits</span></legend>
+        <div class="chips" id="disciplines"></div>
+      </div>
+
+      <div class="nav">
+        <button class="ghost" type="button" data-prev>← Back</button>
+        <button class="primary" type="button" data-next="2">Continue →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3 — Themes & formats -->
+    <div class="step card" data-step="3" hidden>
+      <h2 id="step3Title">Themes &amp; opportunity types</h2>
+      <p class="sub">This shapes what gets searched.</p>
+
+      <div class="field">
+        <label class="lbl" for="themes">Themes &amp; focus areas <span class="req">*</span></label>
+        <textarea id="themes" name="themes" placeholder="comma-separated tags, e.g. mental health, archives, generative art" required></textarea>
+      </div>
+
+      <div class="field">
+        <legend style="margin-bottom:10px"><span id="formatsLbl">Submission formats</span> <span class="req">*</span></legend>
+        <div class="chips" id="formats"></div>
+      </div>
+
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer;color:var(--muted);font-size:14px;padding:6px 0">Optional — eligibility, sources, exclusions</summary>
+        <div style="padding-top:10px">
+          <div class="field">
+            <label class="lbl" for="eligibility">Eligibility notes</label>
+            <input id="eligibility" name="eligibility" type="text" placeholder='e.g. "must accept Australian or international applicants"'>
+          </div>
+          <div class="field">
+            <label class="lbl" for="sources">Sources you already track</label>
+            <textarea id="sources" name="sources" placeholder="one URL per line"></textarea>
+          </div>
+          <div class="field">
+            <label class="lbl" for="excludes">Topics to exclude</label>
+            <input id="excludes" name="excludes" type="text" placeholder="comma-separated">
+          </div>
+        </div>
+      </details>
+
+      <!-- Honeypot -->
+      <div class="honey" aria-hidden="true">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <div class="nav">
+        <button class="ghost" type="button" data-prev>← Back</button>
+        <button class="primary" id="submit" type="submit">Generate my digest ✦</button>
+      </div>
+    </div>
+  </form>
+</section>
+
+<!-- ============ GENERATING ============ -->
+<section class="generating" id="generating">
+  <div class="gen-orb"></div>
+  <p class="gen-title">Building your digest…</p>
+  <p class="gen-tip" id="genTip">Searching for festivals and open calls…</p>
+  <p class="gen-meta">This usually takes 60–120 seconds. Don't close the tab.</p>
+</section>
+
+<!-- ============ GATE (email + tier) ============ -->
+<section class="gate" id="gate">
+  <h2>Where should we send it?</h2>
+  <p class="sub">Your digest is ready. Pick how often you'd like to receive it — and where.</p>
+
+  <div class="email-field">
+    <label for="gateEmail">Email <span class="req">*</span></label>
+    <input id="gateEmail" type="email" placeholder="you@example.com" required>
+  </div>
+
+  <!-- Free, prominent -->
+  <button class="free-tier" type="button" id="freeTier" data-tier="free">
+    <span class="emoji">✉️</span>
+    <span class="body">
+      <span class="title-row">
+        <span class="title">One email, just this once</span>
+        <span class="free-badge">FREE</span>
+      </span>
+      <span class="desc">You'll get this digest in your inbox once. No follow-ups, nothing stored.</span>
+    </span>
+    <span class="price">$0</span>
+  </button>
+
+  <!-- Recurring upsell -->
+  <div class="recurring-intro">
+    <h3>Ensure half a year of preparation for success.</h3>
+    <p id="recurringSub">Tick off all your goals for your semester — pick how often you'd like a fresh digest delivered.</p>
+  </div>
+
+  <div class="tiers" id="tiers" role="radiogroup" aria-label="Cadence">
+    <button class="tier locked" type="button" data-tier="monthly" data-price="$7.99 for 6 months" data-cadence="Monthly">
+      <span class="lock-badge">🔒 SOON</span>
+      <span class="emoji">🥤</span>
+      <span class="cadence">Monthly</span>
+      <span class="price">$7.99</span>
+      <span class="term">for 6 months</span>
+      <span class="label">a frappe coffee</span>
+    </button>
+    <button class="tier locked" type="button" data-tier="fortnightly" data-price="$15 for 6 months" data-cadence="Fortnightly">
+      <span class="lock-badge">🔒 SOON</span>
+      <span class="emoji">🍕</span>
+      <span class="cadence">Fortnightly</span>
+      <span class="price">$15</span>
+      <span class="term">for 6 months</span>
+      <span class="label">a pizza</span>
+    </button>
+    <button class="tier locked" type="button" data-tier="weekly" data-price="$35.50 for 6 months" data-cadence="Weekly">
+      <span class="lock-badge">🔒 SOON</span>
+      <span class="emoji">🍱</span>
+      <span class="cadence">Weekly</span>
+      <span class="price">$35.50</span>
+      <span class="term">for 6 months</span>
+      <span class="label">lunch with a drink</span>
+    </button>
+    <button class="tier locked" type="button" data-tier="biweekly" data-price="$54.70 for 6 months" data-cadence="Twice a week">
+      <span class="lock-badge">🔒 SOON</span>
+      <span class="emoji">🍽️</span>
+      <span class="cadence">Twice a week</span>
+      <span class="price">$54.70</span>
+      <span class="term">for 6 months</span>
+      <span class="label">a dinner out</span>
+    </button>
+  </div>
+
+  <div class="gate-msg" id="gateMsg" role="status"></div>
+
+  <div class="nav" style="margin-top:0">
+    <button class="ghost" type="button" id="gateBack">← Back</button>
+    <button class="primary" type="button" id="gateContinue">Show my digest →</button>
+  </div>
+</section>
+
+<!-- ============ RESULT ============ -->
+<section class="result" id="result">
+  <h2 id="resultTitle">Your dissemination digest ✦</h2>
+  <p class="sub" id="resultSub">Researched just now. Filtered for your project, location and eligibility.</p>
+  <div class="result-actions">
+    <button id="copyRich" type="button">📋 Copy (rich text)</button>
+    <button id="copyHtml" type="button">⟨/⟩ Copy HTML</button>
+    <button id="copyText" type="button">≡ Copy plain text</button>
+    <button id="printBtn" type="button">🖨 Print / Save as PDF</button>
+  </div>
+  <div class="preview" id="preview"></div>
+  <button class="restart" id="restartBtn" type="button">← Start over with a different project</button>
+</section>
+
+<footer>
+  <p><strong>Want it on autopilot?</strong> A recurring tier — your digest delivered every week, fortnight or month — is on the way. Support the project and I'll set one up for you.</p>
+  <a class="bmc" href="https://buymeacoffee.com/taniaolarte" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+</footer>
+
+<script>
+  // PHASE 2: paying users will skip this form entirely — their saved profile
+  // will be fed straight into buildPrompt() by a recurring cron worker.
+
+  const MODES = {
+    creative: {
+      disciplinesLabel: "Disciplines",
+      formatsLabel: "Submission formats",
+      careerLabel: "Career stage",
+      careerOptions: ["Student","Emerging","Mid-career","Established","Hobbyist"],
+      projectNameLabel: "Project name",
+      step1Title: "What are you making?",
+      step3Title: "Themes & opportunity types",
+      themesPlaceholder: "comma-separated tags, e.g. mental health, archives, generative art",
+      disciplines: ["Games","Animation","Interactive media","Digital art","XR/VR/AR","Sound/audio","Film/video","Experimental","Research/academic"],
+      formats: ["Festivals","Showcases & exhibitions","Conference papers","Conference posters","WIP/late-breaking tracks","Grants & funding","Residencies","Accelerators","Awards & competitions","Workshops & talks","Playtesting","Demos"],
+    },
+    startup: {
+      disciplinesLabel: "Verticals",
+      formatsLabel: "Opportunity types",
+      careerLabel: "Stage",
+      careerOptions: ["Idea","Pre-product","Beta","Revenue","Funded"],
+      projectNameLabel: "Company / startup name",
+      step1Title: "What are you building?",
+      step3Title: "Themes & opportunity types",
+      themesPlaceholder: "comma-separated tags, e.g. b2b sales, agentic AI, climate adaptation",
+      disciplines: ["SaaS","Marketplace","Hardware","Climate","Health","Fintech","AI/ML","Consumer","Dev tools","Web3","Bio","Education"],
+      formats: ["Accelerators","Pre-seed grants","Pitch competitions","Demo days","Founder fellowships","Government R&D grants","Hackathons","Conferences","Incubators","Visa programs","Angel/VC events"],
+    },
+  };
+
+  let mode = "creative"; // set when user clicks a tile
+
+  function renderChips(containerId, name, items){
+    const c = document.getElementById(containerId);
+    c.innerHTML = items.map((v,i) => {
+      const id = name+"_"+i;
+      const esc = v.replace(/"/g,"&quot;");
+      return '<label class="chip" for="'+id+'"><input type="checkbox" id="'+id+'" name="'+name+'" value="'+esc+'"><span>'+v+'</span></label>';
+    }).join("");
+  }
+
+  const HERO_COPY = {
+    creative: {
+      hl: "festivals, grants &amp; residencies",
+      lede: "Tell us what you're making. A research assistant scours the web and builds a curated digest you can read right here.",
+      recurringSub: "Tick off all your goals for your semester — pick how often you'd like a fresh digest delivered.",
+    },
+    startup: {
+      hl: "accelerators, grants &amp; pitch comps",
+      lede: "Tell us what you're building. A research assistant scours the web and builds a curated digest of programs, grants and pitch comps you can read right here.",
+      recurringSub: "Tick off all your goals for your next two quarters — pick how often you'd like a fresh digest delivered.",
+    },
+  };
+
+  function applyMode(m){
+    mode = m;
+    const M = MODES[m];
+    document.body.dataset.mode = m;
+
+    // wizard labels & chips
+    renderChips("disciplines","disciplines",M.disciplines);
+    renderChips("formats","formats",M.formats);
+    document.getElementById("disciplinesLbl").textContent = M.disciplinesLabel;
+    document.getElementById("formatsLbl").textContent = M.formatsLabel;
+    document.getElementById("careerLbl").textContent = M.careerLabel;
+    document.getElementById("projectNameLbl").textContent = M.projectNameLabel;
+    document.getElementById("step1Title").textContent = M.step1Title;
+    document.getElementById("step3Title").textContent = M.step3Title;
+    document.getElementById("themes").placeholder = M.themesPlaceholder;
+    const sel = document.getElementById("career");
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Choose…</option>' + M.careerOptions.map(o => '<option>'+o+'</option>').join("");
+    if (M.careerOptions.includes(prev)) sel.value = prev;
+
+    // hero copy
+    document.getElementById("heroHl").innerHTML = HERO_COPY[m].hl;
+    document.getElementById("heroLede").textContent = HERO_COPY[m].lede;
+    document.getElementById("recurringSub").textContent = HERO_COPY[m].recurringSub;
+
+    // toggle UI state
+    document.querySelectorAll("#modeToggle button").forEach(b => {
+      const on = b.dataset.mode === m;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  const hero = document.getElementById("hero");
+  const wizard = document.getElementById("wizard");
+  const generating = document.getElementById("generating");
+  const gateEl = document.getElementById("gate");
+  const resultEl = document.getElementById("result");
+  const errEl = document.getElementById("error");
+  const stepN = document.getElementById("stepN");
+  const bars = document.querySelectorAll("#progress .bar");
+  const steps = document.querySelectorAll(".step");
+  const backBtn = document.getElementById("backBtn");
+  const TOTAL = 3;
+  let current = 1;
+
+  // initial mode + toggle wiring
+  applyMode("creative");
+  document.querySelectorAll("#modeToggle button").forEach(btn => {
+    btn.addEventListener("click", () => applyMode(btn.dataset.mode));
+  });
+
+  function showStep(n){
+    current = n;
+    steps.forEach(s => s.hidden = (Number(s.dataset.step) !== n));
+    bars.forEach((b,i) => b.classList.toggle("on", i < n));
+    stepN.textContent = n + " / " + TOTAL;
+    clearError();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  document.getElementById("startBtn").addEventListener("click", () => {
+    hero.style.display = "none";
+    wizard.classList.add("show");
+    showStep(1);
+  });
+
+  backBtn.addEventListener("click", () => {
+    if (current === 1) {
+      wizard.classList.remove("show");
+      hero.style.display = "";
+    } else { showStep(current - 1); }
+  });
+  document.querySelectorAll("[data-prev]").forEach(b => b.addEventListener("click", () => showStep(current - 1 || 1)));
+  document.querySelectorAll("[data-next]").forEach(b => b.addEventListener("click", () => { if (validateStep(current)) showStep(current + 1); }));
+
+  const form = document.getElementById("form");
+  function showError(msg){ errEl.textContent = msg; errEl.style.display = "block"; }
+  function clearError(){ errEl.style.display = "none"; errEl.textContent = ""; }
+  function checked(name){ return Array.from(document.querySelectorAll('input[name="'+name+'"]:checked')).map(i => i.value); }
+
+  function validateStep(n){
+    clearError();
+    const M = MODES[mode];
+    if (n === 1) {
+      if (!form.projectName.value.trim()) return showError("Give your " + (mode === "startup" ? "startup" : "project") + " a name."), false;
+      if (!form.projectDescription.value.trim()) return showError("Describe it in a sentence or two."), false;
+    }
+    if (n === 2) {
+      if (!form.name.value.trim()) return showError("Please tell us your name."), false;
+      if (!form.location.value.trim()) return showError("Tell us your location (include your country)."), false;
+      if (!form.career.value) return showError("Pick your " + M.careerLabel.toLowerCase() + "."), false;
+      if (checked("disciplines").length === 0) return showError("Pick at least one " + M.disciplinesLabel.toLowerCase().replace(/s$/,"") + "."), false;
+    }
+    if (n === 3) {
+      if (!form.themes.value.trim()) return showError("Add a few themes — even rough tags help."), false;
+      if (checked("formats").length === 0) return showError("Pick at least one " + M.formatsLabel.toLowerCase().replace(/s$/,"") + "."), false;
+    }
+    return true;
+  }
+
+  // rotating tips during generation
+  const TIPS = {
+    creative: [
+      "Searching for festivals and open calls…",
+      "Looking up current grant deadlines…",
+      "Checking residencies that accept your location…",
+      "Cross-checking eligibility…",
+      "Filtering out closed and region-locked listings…",
+      "Sorting by deadline and fit…",
+      "Almost there — formatting your digest…",
+    ],
+    startup: [
+      "Searching open accelerator applications…",
+      "Looking up pitch competitions with cash prizes…",
+      "Checking founder fellowships for your stage…",
+      "Cross-checking eligibility and geography…",
+      "Filtering out late-stage-only programs…",
+      "Sorting by deadline and fit…",
+      "Almost there — formatting your digest…",
+    ],
+  };
+  let tipTimer = null;
+  function startTips(){
+    const el = document.getElementById("genTip");
+    const list = TIPS[mode] || TIPS.creative;
+    let i = 0;
+    el.textContent = list[0];
+    tipTimer = setInterval(() => { i = (i+1) % list.length; el.textContent = list[i]; }, 9000);
+  }
+  function stopTips(){ if (tipTimer) clearInterval(tipTimer); tipTimer = null; }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!validateStep(3)) return;
+
+    const data = {
+      mode,
+      name: form.name.value.trim(),
+      location: form.location.value.trim(),
+      career: form.career.value,
+      projectName: form.projectName.value.trim(),
+      projectDescription: form.projectDescription.value.trim(),
+      disciplines: checked("disciplines"),
+      themes: form.themes.value.trim(),
+      formats: checked("formats"),
+      eligibility: form.eligibility.value.trim(),
+      sources: form.sources.value.trim(),
+      excludes: form.excludes.value.trim(),
+      website: form.website.value, // honeypot
+    };
+
+    wizard.classList.remove("show");
+    generating.classList.add("show");
+    startTips();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      const res = await fetch("/api/digest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json().catch(() => ({}));
+      stopTips();
+      if (res.ok && json.ok && json.html) {
+        // stash the digest and route through the gate first
+        pendingDigest = { html: json.html, subject: json.subject, projectName: data.projectName };
+        generating.classList.remove("show");
+        gateEl.classList.add("show");
+        document.getElementById("gateEmail").focus();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        generating.classList.remove("show");
+        wizard.classList.add("show");
+        showError(json.error || ("Something went wrong (HTTP " + res.status + "). Please try again."));
+      }
+    } catch (err) {
+      stopTips();
+      generating.classList.remove("show");
+      wizard.classList.add("show");
+      showError("Network error — please try again. (" + (err && err.message ? err.message : "") + ")");
+    }
+  });
+
+  // ---------- gate (email + tier picker) ----------
+  let pendingDigest = null; // { html, subject, projectName }
+  let selectedTier = "free";
+
+  const tierBtns = document.querySelectorAll(".tier");          // 4 paid tiers
+  const freeTierBtn = document.getElementById("freeTier");
+  const gateMsg = document.getElementById("gateMsg");
+
+  // Free is always the active selection while paid tiers are locked.
+  freeTierBtn.addEventListener("click", () => {
+    selectedTier = "free";
+    gateMsg.classList.remove("show");
+  });
+
+  tierBtns.forEach(b => b.addEventListener("click", () => {
+    // Paid tier — show a friendly "coming soon" + BMC nudge; Free stays active.
+    const price = b.dataset.price;
+    const cadence = b.dataset.cadence;
+    gateMsg.innerHTML =
+      '<strong>' + cadence + ' (' + price + ') is coming soon.</strong> ' +
+      'I\'m setting up the recurring tier — for now, support the project on ' +
+      '<a href="https://buymeacoffee.com/taniaolarte" target="_blank" rel="noopener">Buy Me a Coffee</a> ' +
+      'and grab your free one-off digest below.';
+    gateMsg.classList.add("show");
+  }));
+
+  document.getElementById("gateBack").addEventListener("click", () => {
+    gateEl.classList.remove("show");
+    wizard.classList.add("show");
+    showStep(3);
+  });
+
+  document.getElementById("gateContinue").addEventListener("click", () => {
+    const email = document.getElementById("gateEmail").value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      gateMsg.innerHTML = "Please enter a valid email so we can deliver your digest.";
+      gateMsg.classList.add("show");
+      document.getElementById("gateEmail").focus();
+      return;
+    }
+    if (!pendingDigest) return;
+    gateEl.classList.remove("show");
+    showResult(pendingDigest.html, pendingDigest.subject, pendingDigest.projectName, email);
+    pendingDigest = null;
+  });
+
+  // ---------- result rendering + copy ----------
+  let lastHtml = "";
+  let lastText = "";
+
+  function showResult(html, subject, projectName, email){
+    lastHtml = html;
+    document.getElementById("preview").innerHTML = html;
+    document.getElementById("resultTitle").textContent = subject || ("Your dissemination digest — " + projectName);
+    const sub = document.getElementById("resultSub");
+    if (email) sub.textContent = "Researched just now for " + projectName + ". A copy will be emailed to " + email + " once email delivery is enabled.";
+    lastText = htmlToText(document.getElementById("preview"));
+    generating.classList.remove("show");
+    resultEl.classList.add("show");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function htmlToText(root){
+    // Walk the DOM and emit a readable plaintext version
+    const lines = [];
+    function walk(node, depth){
+      if (node.nodeType === 3) { lines.push(node.textContent.replace(/\s+/g," ").trim()); return; }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName;
+      if (tag === "H1" || tag === "H2") { lines.push("\n\n" + node.textContent.trim() + "\n" + "=".repeat(Math.min(60, node.textContent.trim().length))); return; }
+      if (tag === "H3") { lines.push("\n\n" + node.textContent.trim() + "\n" + "-".repeat(Math.min(40, node.textContent.trim().length))); return; }
+      if (tag === "P") { lines.push("\n" + node.textContent.trim()); return; }
+      if (tag === "LI") {
+        const linkEls = node.querySelectorAll("a");
+        let txt = node.textContent.replace(/\s+/g," ").trim();
+        linkEls.forEach(a => {
+          const t = a.textContent.trim(), h = a.getAttribute("href");
+          if (h && t && !txt.includes(h)) txt = txt.replace(t, t + " (" + h + ")");
+        });
+        lines.push("• " + txt);
+        return;
+      }
+      if (tag === "BR") { lines.push("\n"); return; }
+      node.childNodes.forEach(c => walk(c, depth+1));
+    }
+    walk(root, 0);
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  async function copyRich(){
+    try {
+      if (window.ClipboardItem && navigator.clipboard.write) {
+        const item = new ClipboardItem({
+          "text/html": new Blob([lastHtml], {type:"text/html"}),
+          "text/plain": new Blob([lastText], {type:"text/plain"}),
+        });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(lastText);
+      }
+      flash("copyRich","Copied!");
+    } catch { flash("copyRich","Copy failed"); }
+  }
+  async function copyHtml(){
+    try { await navigator.clipboard.writeText(lastHtml); flash("copyHtml","Copied!"); }
+    catch { flash("copyHtml","Copy failed"); }
+  }
+  async function copyText(){
+    try { await navigator.clipboard.writeText(lastText); flash("copyText","Copied!"); }
+    catch { flash("copyText","Copy failed"); }
+  }
+  function flash(id,msg){
+    const b = document.getElementById(id);
+    const orig = b.textContent;
+    b.textContent = msg; b.classList.add("copied");
+    setTimeout(() => { b.textContent = orig; b.classList.remove("copied"); }, 1400);
+  }
+  document.getElementById("copyRich").addEventListener("click", copyRich);
+  document.getElementById("copyHtml").addEventListener("click", copyHtml);
+  document.getElementById("copyText").addEventListener("click", copyText);
+  document.getElementById("printBtn").addEventListener("click", () => window.print());
+  document.getElementById("restartBtn").addEventListener("click", () => {
+    resultEl.classList.remove("show");
+    gateEl.classList.remove("show");
+    pendingDigest = null;
+    document.getElementById("gateEmail").value = "";
+    gateMsg.classList.remove("show");
+    selectedTier = "free";
+    hero.style.display = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+</script>
+</body>
+</html>
