@@ -37,8 +37,16 @@ export async function onRequest(context) {
     const key = (env.ANTHROPIC_API_KEY || "").trim();
     const useMock = !key || key === "sk-ant-..." || key.includes("placeholder");
 
+    // Free dev-loop mode: the exact project name "Library of Emotions" returns a
+    // canned digest. Lets us iterate on the email/Resend path without spending
+    // Anthropic credits or burning the rate-limit budget.
+    const isCannedTest = (body.projectName || "").trim().toLowerCase() === "library of emotions";
+
     let llmHtml;
-    if (useMock) {
+    if (isCannedTest) {
+      await new Promise((r) => setTimeout(r, 1500));
+      llmHtml = buildLibraryOfEmotionsTestDigest(body);
+    } else if (useMock) {
       // Simulate the latency of a real Claude call so the loading screen behaves.
       await new Promise((r) => setTimeout(r, 4000));
       llmHtml = buildMockDigest(body);
@@ -67,6 +75,7 @@ function validate(b) {
   const need = (k) => typeof b[k] === "string" && b[k].trim().length > 0;
   if (!need("name")) return { ok: false, error: "Name is required" };
   if (!need("location")) return { ok: false, error: "Location is required" };
+  if (!need("citizenship")) return { ok: false, error: "Country of citizenship is required" };
   if (!need("career")) return { ok: false, error: "Career stage is required" };
   if (!need("projectName")) return { ok: false, error: "Project name is required" };
   if (!need("projectDescription")) return { ok: false, error: "Project description is required" };
@@ -174,6 +183,7 @@ export function buildPrompt(body) {
   const formats = Array.isArray(body.formats) ? body.formats : [];
 
   const country = (body.location || "").split(",").pop().trim() || body.location || "";
+  const citizenship = (body.citizenship || "").trim();
   const firstName = (body.name || "").split(/\s+/)[0] || body.name || "";
   const primaryDiscipline = (disciplines[0] || "").toLowerCase();
 
@@ -214,6 +224,7 @@ export function buildPrompt(body) {
 # About me
 - Name: ${body.name}
 - Location: ${body.location}
+- Country of citizenship: ${citizenship}
 - Stage: ${body.career}
 
 # My ${M.practice}
@@ -244,7 +255,7 @@ Only include ${M.opportunityNounShort} that pass ALL of these:
 - Deadline is after ${today}.
 - Currently open, opening soon, or has a clearly announced future deadline.
 - Relevant to at least one of my themes or ${M.formatsLabel}.
-- Open to applicants from ${country}, or international applicants including ${country}.
+- Open to applicants from ${country}, or open to ${citizenship} citizens, or international applicants including either.
 - ${eligibilityClause}
 - Suitable for at least one of my ${M.formatsLabel}.
 
@@ -311,13 +322,13 @@ async function callClaude(env, system, user) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 8192,
+      max_tokens: 4096,
       system,
       tools: [
         {
           type: "web_search_20250305",
           name: "web_search",
-          max_uses: 10,
+          max_uses: 3,
         },
       ],
       messages: [{ role: "user", content: user }],
@@ -350,43 +361,84 @@ function buildMockDigest(body) {
   const titleEmoji = mode === "startup" ? "🚀" : "🔍";
   const titleNoun = mode === "startup" ? "Opportunity Digest" : "Dissemination Digest";
 
-  const creativeItems = {
+  // Real, verified opportunities researched May 2026 for the three preset
+  // example profiles. If the project name matches one of the examples we
+  // show its tailored set; otherwise we fall back to the Library of Emotions
+  // set as a generic creative digest.
+
+  // ---- Library of Emotions ----
+  // Tania Olarte (Colombia citizen, Melbourne resident), emerging, interactive
+  // installation / digital art / sound. Themes: memory, mental health,
+  // generative art, archives.
+  const libraryOfEmotionsItems = {
     high: [
-      { name: "Ars Electronica Festival", url: "https://ars.electronica.art/", type: "Festival", deadline: "May 28, 2026", where: "Linz, Austria · hybrid", why: "Long-running festival for digital and experimental art. Strong fit for projects sitting between code and culture.", suggested: "Festival submission" },
-      { name: "MacDowell Fellowship", url: "https://www.macdowell.org/", type: "Residency", deadline: "September 10, 2026", where: "New Hampshire, USA · 2–8 weeks", why: "Open to international applicants. Ideal for sustained focus on a single body of work.", suggested: "Residency application" },
-      { name: "Mozilla Creative Media Awards", url: "https://foundation.mozilla.org/en/what-we-fund/", type: "Grant", deadline: "Rolling — next batch July 2026", where: "Global · up to $50k", why: "Funds creative tech projects with a public-interest angle.", suggested: "Grant proposal" },
+      { name: "IDFA DocLab — Interactive & Immersive Projects 2026", url: "https://professionals.idfa.nl/new-media/call-for-festival-entries-interactive-immersive-projects-and-performances/", type: "Festival", deadline: "June 16, 2026", where: "Amsterdam, Netherlands · hybrid", why: "Strongest international venue for interactive/immersive work blending memory, sound and sensor-based interaction. Open globally; emerging-artist entry fee €35.", suggested: "Festival entry (final deadline)" },
+      { name: "Harvestworks 2026 Artists-in-Residence", url: "https://www.harvestworks.org/open-call-2026-artists-in-residence-program/", type: "Residency", deadline: "Rolling through 2026", where: "New York, USA · digital media", why: "Dedicated to multichannel audio/video installations, AR/VR and sensor-based work — exactly what Library of Emotions is. International applicants welcome.", suggested: "Residency application" },
+      { name: "ISCP — International Studio & Curatorial Program", url: "https://iscp-nyc.org/apply", type: "Residency", deadline: "Rolling — no deadline", where: "Brooklyn, NY · 3–12 months", why: "No application fee, no fixed deadline, accepts artists from anywhere. Strong curatorial support and a studio to prototype the installation in.", suggested: "Rolling application" },
     ],
     medium: [
-      { name: "IDFA DocLab Forum", url: "https://www.idfa.nl/en/doclab", type: "Festival / Forum", deadline: "August 1, 2026", why: "Strong for interactive and immersive documentary work." },
-      { name: "Sundance New Frontier", url: "https://www.sundance.org/programs/new-frontier", type: "Festival", deadline: "Aug 22, 2026", why: "Highest-profile platform for tech-leaning narrative work." },
-      { name: "Rhizome Commissions", url: "https://rhizome.org/editorial/2024/jan/22/commissions-and-fellowships/", type: "Commission", deadline: "Rolling", why: "Backs experimental work at the edge of art and technology." },
+      { name: "Ian Potter Cultural Trust — Emerging Artist Grant", url: "https://www.ianpotterculturaltrust.org.au/opportunities/emerging-artist-grants/", type: "Grant", deadline: "June 23, 2026", why: "Up to AU$15k for early-career professional development. Requires Australian citizenship or PR — verify your residency status before applying." },
+      { name: "Creative Australia — Arts Projects for Individuals & Groups", url: "https://creative.gov.au/investments-opportunities/arts-projects-individuals-and-groups", type: "Grant", deadline: "Next round 2026 (rolling rounds)", why: "AU$10k–$50k for new work, exhibitions, residencies. Eligibility hinges on Australian citizenship/PR/Special Cat. Visa — check current round." },
+      { name: "DOM Art Residence — Open Call 2026", url: "https://domartresidence.com/opencall", type: "Residency", deadline: "Open through 2026", why: "Residency aimed at moving-image/sound/time-based work themed around slowness and listening — directly resonant with the memory-archive concept." },
     ],
     urgent: [
-      { name: "transmediale 2026 Open Call", url: "https://transmediale.de/", deadline: "Closes June 1, 2026 (14 days)", need: "200-word concept, 3 work samples, CV." },
+      { name: "Ars Electronica — Sonic Saturday 2026", url: "https://ars.electronica.art/news/en/opencalls/", deadline: "Closes May 24, 2026 (4 days)", need: "Project description + work sample. Two days of sound art and spatial music at the September festival in Linz." },
     ],
     soon: [
-      { name: "Pew Center Fellowship for Artists", url: "https://www.pcah.us/", expected: "Opens August 2026", why: "Generous unrestricted award for individual artists." },
-      { name: "Creative Australia Arts Projects", url: "https://creative.gov.au/", expected: "Opens July 2026", why: `Direct grant pathway for ${country}-based creators.` },
+      { name: "CTM Festival 2027 — Open Calls", url: "https://www.ctm-festival.de/news/ctm-2027-festival-save-the-date", expected: "Opens late June 2026", why: "Berlin's adventurous-music festival announces its 2027 theme + Resynthesising the Traditional artistic research lab in late June." },
+      { name: "Prix Ars Electronica 2027", url: "https://ars.electronica.art/prix/en/opencall/", expected: "Opens January 2027", why: "Free to enter. Digital Humanity and Interactive Art+ categories are direct fits for memory/AI installation work." },
     ],
   };
 
-  const startupItems = {
+  // ---- Glass Ear ----
+  // Jonas Berg (German citizen, Melbourne resident), mid-career, sound/
+  // experimental/research. Themes: accessibility, deaf culture, vibration,
+  // architecture, performance.
+  const glassEarItems = {
     high: [
-      { name: "Y Combinator W27", url: "https://www.ycombinator.com/apply", type: "Accelerator", deadline: "September 22, 2026", where: "SF / remote · $500k", why: "Highest-signal accelerator. Open to international founders.", suggested: "Full application" },
-      { name: "On Deck Founders Fellowship", url: "https://www.beondeck.com/", type: "Fellowship", deadline: "Rolling", where: "Remote · 10 weeks", why: "Strong community for pre-idea and pre-product founders.", suggested: "Fellowship application" },
-      { name: "TechCrunch Disrupt Startup Battlefield", url: "https://techcrunch.com/events/disrupt/", type: "Pitch competition", deadline: "July 15, 2026", where: "San Francisco · $100k prize", why: "Massive PR upside. Open to early-stage startups globally.", suggested: "Pitch deck + demo video" },
+      { name: "IDFA DocLab — Interactive & Immersive Projects 2026", url: "https://professionals.idfa.nl/new-media/call-for-festival-entries-interactive-immersive-projects-and-performances/", type: "Festival", deadline: "June 16, 2026", where: "Amsterdam, Netherlands · hybrid", why: "Performance-based installation with tactile/architectural components is exactly DocLab territory. EU passport keeps travel logistics simple.", suggested: "Festival entry (final deadline)" },
+      { name: "Harvestworks 2026 Artists-in-Residence", url: "https://www.harvestworks.org/open-call-2026-artists-in-residence-program/", type: "Residency", deadline: "Rolling through 2026", where: "New York, USA · digital media", why: "Multichannel audio, live performance with real-time processing and sensor-based work are all directly supported. International applicants welcome.", suggested: "Residency application" },
+      { name: "Creative Australia — Arts Projects for Individuals & Groups", url: "https://creative.gov.au/investments-opportunities/arts-projects-individuals-and-groups", type: "Grant", deadline: "Next round 2026 (rolling rounds)", where: "Australia · AU$10k–$50k", why: "Direct grant pathway for Melbourne-based mid-career experimental work. Additional access support available for d/Deaf or disabled applicants/themes. Verify residency-status eligibility.", suggested: "Project grant proposal" },
     ],
     medium: [
-      { name: "Climate Tech VC Open Office Hours", url: "https://www.climatetechvc.org/", type: "Event / pipeline", deadline: "Monthly", why: "Direct line to climate-focused investors." },
-      { name: "South Summit", url: "https://www.southsummit.com/", type: "Conference / pitch", deadline: "August 30, 2026", why: "European startup conference, good for cross-Atlantic exposure." },
-      { name: "Antler Global Programme", url: "https://www.antler.co/", type: "Pre-seed program", deadline: "Rolling cohorts", why: "Co-founder matching plus pre-seed cheque." },
+      { name: "ISCP — International Studio & Curatorial Program", url: "https://iscp-nyc.org/apply", type: "Residency", deadline: "Rolling — no deadline", why: "Free application, no deadline. Strong curatorial mentorship for hybrid performance/installation work." },
+      { name: "Akademie Schloss Solitude — Solitude Fellowship", url: "https://www.akademie-solitude.de/en/fellowship/application/", type: "Fellowship", deadline: "Next cycle opens Oct 2026", why: "6–9 month fully-funded residency in Stuttgart with €1,300/month stipend — strong fit for sustained sound+accessibility research." },
+      { name: "Berlin Senate — Cultural Exchange Grants", url: "https://www.berlin.de/sen/kultur/en/funding/funding-programmes/international-cultural-exchange/artikel.236165.en.php", type: "Grant", deadline: "Next call opens August 2026", why: "EU/Berlin exchange residencies in Istanbul, Paris, NYC, Tokyo — especially relevant given Jonas's German citizenship." },
     ],
     urgent: [
-      { name: "AWS Activate — Founders track", url: "https://aws.amazon.com/activate/", deadline: "Always-on (apply this week)", need: "Quick form. Up to $100k in AWS credits." },
+      { name: "Ars Electronica — Sonic Saturday 2026", url: "https://ars.electronica.art/news/en/opencalls/", deadline: "Closes May 24, 2026 (4 days)", need: "Project description + work sample. Two days dedicated to sound art and spatial music at the September festival." },
     ],
     soon: [
-      { name: "EU Horizon EIC Accelerator", url: "https://eic.ec.europa.eu/eic-funding-opportunities/eic-accelerator_en", expected: "Next cutoff October 2026", why: "Grants up to €2.5M plus equity. Highly competitive but life-changing." },
-      { name: "Endeavor Catalyst", url: "https://endeavor.org/catalyst/", expected: "Q3 2026 selection", why: "Late-seed / Series A co-investment vehicle." },
+      { name: "CTM Festival 2027 — Open Calls", url: "https://www.ctm-festival.de/news/ctm-2027-festival-save-the-date", expected: "Opens late June 2026", why: "Berlin's adventurous-music festival announces its 2027 theme + open calls in late June. Strong fit for sub-bass / tactile / architectural sound work." },
+      { name: "DAAD Artists-in-Berlin (Music/Sound) — 2028 cycle", url: "https://www.berliner-kuenstlerprogramm.de/en/application/", expected: "Opens December 2026", why: "Fully-funded 12-month Berlin residency. Music & sound category accepts direct applications from international artists." },
+    ],
+  };
+
+  // pick set by project name; default to Library of Emotions if unknown
+  const lcName = projectName.toLowerCase();
+  let creativeItems = libraryOfEmotionsItems;
+  if (lcName.includes("glass ear")) creativeItems = glassEarItems;
+
+  // ---- Oskoole ----
+  // Tania Olarte, Melbourne-based, Colombian citizen, pre-product AI edtech.
+  // Real, verified opportunities researched May 2026.
+  const startupItems = {
+    high: [
+      { name: "Antler Australia — AUS16 Residency", url: "https://www.antler.co/apply", type: "Accelerator", deadline: "Rolling — next cohort starts July 27, 2026", where: "Sydney / Melbourne / Brisbane · up to AU$260k for 12%", why: "Pre-product founders with strong conviction are exactly Antler's target. 10-week in-person residency + ARC follow-on support. Multi-city Aus cohort means you can join from Melbourne.", suggested: "Full residency application" },
+      { name: "Y Combinator — Fall 2026 batch", url: "https://www.ycombinator.com/apply", type: "Accelerator", deadline: "Expected August 2026 (typical cadence)", where: "SF / remote · US$500k standard deal", why: "Highest-signal accelerator globally. AI-native edtech tools are consistently funded; YC is open to international founders and pre-revenue ideas.", suggested: "Full application + co-founder narrative" },
+      { name: "EduGrowth — Innovation Alley at EDUtech 2026", url: "https://edugrowth.org.au/innovation-alley-edutech-2026/", type: "Showcase / ecosystem", deadline: "Rolling for 2026 program", where: "Australia's largest education event", why: "Curated showcase of 50+ Australian edtech startups with discounted booth packages for early-stage companies. Direct line to school decision-makers and Aus edtech investors.", suggested: "Innovation Alley application" },
+    ],
+    medium: [
+      { name: "AWS Activate — Founders Package", url: "https://aws.amazon.com/startups/credits/", type: "Credits (rolling)", deadline: "Rolling — apply any time", why: "US$1k AWS credits with no equity and no provider required. Easy first win to underwrite the pre-product build. AWS EdStart adds up to US$5k for edtech-specific applicants." },
+      { name: "R&D Tax Incentive — AusIndustry registration", url: "https://business.gov.au/grants-and-programs/research-and-development-tax-incentive", type: "Govt tax incentive", deadline: "April 30, 2027 (for FY 2025–26 R&D)", why: "43.5% refundable offset on eligible AI/SaaS R&D spend for sub-$20M turnover companies. Start logging eligible activities now to claim later." },
+      { name: "GSV Cup 2027 — Global EdTech Pitch", url: "https://asugsvsummit.com/gsv-cup", type: "Pitch competition", deadline: "Nominations expected ~Sep–Nov 2026", why: "World's largest edtech pitch competition. Pre-seed/seed startups compete for up to US$1M in prizes at ASU+GSV 2027 in San Diego." },
+    ],
+    urgent: [
+      { name: "TechCrunch Disrupt — Startup Battlefield 200", url: "https://techcrunch.com/2026-startup-battlefield-200-application/", deadline: "Closes May 27, 2026 (7 days)", need: "Online application + 2-min pitch video + traction summary. Open to pre-Series B globally; selection includes free Disrupt booth, VC access and a shot at US$100k equity-free." },
+    ],
+    soon: [
+      { name: "SXSW EDU Launch Startup Competition 2027", url: "https://sxswedu.com/competitions/launch/", expected: "Applications open June 23, 2026", why: "Walton Family Foundation–backed pitch competition for early-stage edtech. Strong investor + buyer exposure at SXSW EDU 2027 in Austin." },
+      { name: "Antler Australia — AUS17 cohort", url: "https://www.antler.co/cohort-start-dates", expected: "Applications open Q3 2026 for February 2027 cohort", why: "If the July 2026 cohort feels rushed, the February cohort gives 6 months to sharpen the founder story and customer evidence." },
     ],
   };
 
@@ -421,7 +473,7 @@ function buildMockDigest(body) {
 
   return `
 <h2 style="font-size:22px;margin-bottom:8px;color:#1f1a17">${titleEmoji} ${titleNoun} — ${projectName}</h2>
-<p style="color:#6b6259;font-size:14px;font-style:italic">⚠️ This is a <strong>local mock</strong> with placeholder data. Drop a real ANTHROPIC_API_KEY into <code>.dev.vars</code> to get a real, web-searched digest.</p>
+<p style="color:#6b6259;font-size:14px;font-style:italic">⚠️ <strong>Local demo</strong> — opportunities below were researched manually for the three preset examples. Drop a real ANTHROPIC_API_KEY into <code>.dev.vars</code> for a fresh, live-searched digest for any project.</p>
 <p>Hi ${firstName}, here is your ${titleNoun.toLowerCase()}, filtered for relevance, active or upcoming deadlines, and eligibility for ${country} or international applicants.</p>
 
 <h3>🌟 High priority — strongest matches</h3>
@@ -448,6 +500,146 @@ function buildMockDigest(body) {
 </ul>`;
 }
 
+// Canned digest used when projectName === "Library of Emotions".
+// Skips Claude + Resend's search costs entirely so we can iterate on the email
+// path for free. Date is stamped at request time; Notion and expired-this-cycle
+// references are stripped vs. the original source content.
+function buildLibraryOfEmotionsTestDigest(body) {
+  const firstName = (body.name || "Tania").split(/\s+/)[0];
+  const d = new Date();
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const todayHuman = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  const linkStyle = 'style="color:#c2410c"';
+
+  const high = `
+    <li style="margin-bottom:18px">
+      <strong><a href="https://gcap.com.au/speaker-submission-2026" ${linkStyle}>GCAP 2026 Speaker Submission</a></strong> ⚠️ CLOSES IN 11 DAYS<br>
+      <em>Type:</em> Conference talk / speaker proposal<br>
+      <em>Deadline:</em> COB Friday 15 May 2026 (AEST)<br>
+      <em>Location / Format:</em> In-person, Melbourne (MIGW) — 5–7 October 2026<br>
+      <em>Why it fits:</em> GCAP is Australia's premier professional game development conference, part of Melbourne International Games Week. The Design track is directly applicable to a talk on emotional literacy, reflective mobile game design, or mental health in games. Speakers receive a $200 AUD honorarium plus a full free conference pass. This is a rare chance to present Library of Emotions to Australia's games industry in your own city. You don't need a finished game — a research-led talk on design practice is welcome.<br>
+      <em>Suggested submission format:</em> 20–30 min industry talk proposal (abstract + talk description + bio)
+    </li>
+    <li style="margin-bottom:18px">
+      <strong><a href="https://chiplay.acm.org/2026/student-game-design-competition" ${linkStyle}>CHI PLAY 2026 — Student Game Design Competition</a></strong><br>
+      <em>Type:</em> Academic conference / student competition<br>
+      <em>Deadline:</em> 3 June 2026 (23:59 AoE)<br>
+      <em>Location / Format:</em> In-person (+ hybrid?), York, UK — 2–5 November 2026<br>
+      <em>Why it fits:</em> CHI PLAY is the ACM SIGCHI conference on play, games, and human-computer interaction — the most prestigious academic venue for this work. The Student Game Design Competition requires a short research paper (up to 8 pages) plus a 3-minute gameplay video. Library of Emotions as a reflective mobile game about emotional literacy is a near-perfect fit: mobile interaction, mental health, HCI, student work. First author must be a student (that's you). Notification 15 July. This could be your strongest peer-reviewed dissemination route for Semester 4.<br>
+      <em>Suggested submission format:</em> Short research paper (up to 8 pages, ACM format) + 3-min gameplay video
+    </li>
+    <li style="margin-bottom:18px">
+      <strong><a href="https://meaningfulplay.msu.edu" ${linkStyle}>Meaningful Play 2026 — Posters &amp; Games Exhibition</a></strong> (already applied ✅)<br>
+      <em>Type:</em> Conference / game exhibition / poster<br>
+      <em>Deadline:</em> 15 May 2026 (11 days away — you applied 28 April ✅)<br>
+      <em>Location / Format:</em> Pittsburgh, USA — 13–15 October 2026<br>
+      <em>Why it fits:</em> You've already applied! Your note says "missing demo" — if a playable demo submission is still possible before May 15, it's worth completing. Meaningful Play is one of the strongest game-design-meets-research venues globally, welcoming academic, independent, experimental, and student games.<br>
+      <em>Action:</em> Check if you can add or update a demo link before 15 May.
+    </li>
+    <li style="margin-bottom:18px">
+      <strong><a href="https://aus.paxsite.com" ${linkStyle}>PAX Aus Indie Showcase 2026</a></strong> — OPENING ANY WEEK NOW<br>
+      <em>Type:</em> Festival / competition<br>
+      <em>Deadline:</em> Est. late May–late June 2026 (typically opens in May, closes ~June 20)<br>
+      <em>Location / Format:</em> In-person, Melbourne Convention Centre — 9–11 Oct 2026<br>
+      <em>Why it fits:</em> The PAX Aus Indie Showcase is the premier Australian indie games showcase. Only AU/NZ developers are eligible. Winners get a free booth at PAX Aus + strong promotional visibility. Your game needs to be in at least beta form. Previous winners include Unpacking and Mini Metro. This is your biggest local showcase opportunity of the year. Check the PAX Aus website weekly — it will appear suddenly.<br>
+      <em>Suggested submission format:</em> Game submission with gameplay footage and description ($25 USD fee)
+    </li>`;
+
+  const medium = `
+    <li style="margin-bottom:12px">
+      <strong><a href="https://indiecade.com/submissions" ${linkStyle}>IndieCade 2026 — Late Submissions</a></strong><br>
+      <em>Type:</em> Festival (for Jan 2027 cycle) · <em>Deadline:</em> 1 June 2026 (12 noon PDT)<br>
+      <em>Why it may be useful:</em> IndieCade is an internationally respected experimental games festival. Late submissions cost $135 USD. Open to all genres and platforms, including mobile and work-in-progress. Good route if you want international experimental-games visibility.
+    </li>
+    <li style="margin-bottom:12px">
+      <strong><a href="https://vicscreen.vic.gov.au/funding/games" ${linkStyle}>VicScreen Victorian Production Fund — Games</a></strong><br>
+      <em>Type:</em> Funding (Victorian studio) · <em>Deadline:</em> 23 June 2026 (5:00 PM AEST)<br>
+      <em>Why it may be useful:</em> Victorian production fund for game studios. Rolling fund with a confirmed June 23 closing date for this round. Worth monitoring if you have a viable application pathway as a Victorian-based creator.
+    </li>
+    <li style="margin-bottom:12px">
+      <strong><a href="https://iitsec.org/serious-games" ${linkStyle}>Serious Games Showcase &amp; Challenge — I/ITSEC 2026</a></strong><br>
+      <em>Type:</em> Serious games showcase / competition · <em>Deadline:</em> 28 August 2026<br>
+      <em>Why it may be useful:</em> One of the most recognised serious games showcases globally. Free entry. Event 30 Nov–3 Dec 2026. Strong route for serious-games dissemination. Open internationally.
+    </li>
+    <li style="margin-bottom:12px">
+      <strong><a href="https://www.screenaustralia.gov.au" ${linkStyle}>Screen Australia Games Production Fund</a></strong><br>
+      <em>Type:</em> Funding · <em>Deadline:</em> 27 August 2026 (opens 25 June 2026)<br>
+      <em>Why it may be useful:</em> National funding for games at production stage. Better suited once Library of Emotions is further along, but worth reviewing eligibility now so you're ready when it opens in June.
+    </li>
+    <li style="margin-bottom:12px">
+      <strong><a href="https://cog2026.fdi.ucm.es" ${linkStyle}>IEEE CoG 2026 — Check Notification Status</a></strong><br>
+      <em>Type:</em> Conference (you applied March 18) · <em>Results:</em> notification was due 1 May 2026 — check your email for an outcome.<br>
+      <em>Why it may be useful:</em> If accepted, the IEEE Conference on Games (1–4 Sep 2026, Madrid) would be a strong peer-reviewed publication and conference presentation.
+    </li>`;
+
+  const urgent = `
+    <li style="margin-bottom:10px">
+      <strong><a href="https://gcap.com.au" ${linkStyle}>GCAP 2026 Speaker Submission</a></strong> · COB 15 May 2026<br>
+      Talk title, 300-word abstract, speaker bio, proposed session format.
+    </li>
+    <li style="margin-bottom:10px">
+      <strong><a href="https://meaningfulplay.msu.edu" ${linkStyle}>Meaningful Play 2026 (demo check)</a></strong> · 15 May 2026<br>
+      Already applied — check if a demo link can be added or updated before the deadline.
+    </li>`;
+
+  const soon = `
+    <li><strong>PAX Aus Indie Showcase 2026</strong> — expected to open any week in May. Check <a href="https://aus.paxsite.com" ${linkStyle}>aus.paxsite.com</a> weekly. High priority.</li>
+    <li><strong>International Student Games Festival 2026 (Warsaw)</strong> — event Oct 8–9, submissions expected ~June–July 2026. Free entry, students + graduates within 12 months eligible. Watch <a href="https://studentgamesfestival.com" ${linkStyle}>studentgamesfestival.com</a>.</li>
+    <li><strong>VicScreen Victorian Production Fund</strong> — deadline 23 June 2026. <a href="https://vicscreen.vic.gov.au" ${linkStyle}>vicscreen.vic.gov.au</a></li>
+    <li><strong>Screen Australia Games Production Fund</strong> — opens 25 June 2026, due 27 Aug 2026. <a href="https://www.screenaustralia.gov.au" ${linkStyle}>screenaustralia.gov.au</a></li>
+    <li><strong>Frosty Mini December 2026</strong> — ANZ-only digital showcase. Watch for Sep–Oct opening. Subscribe at <a href="https://frostygamesfest.beehiiv.com" ${linkStyle}>frostygamesfest.beehiiv.com</a>.</li>
+    <li><strong>Screen Australia Emerging Gamemakers Fund</strong> — next round opens 14 Dec 2026, deadline 25 Feb 2027. Up to $30,000 AUD for prototype or micro-scale game.</li>
+    <li><strong>RMIT Games Day</strong> — rolling monthly. Low-barrier local playtesting and visibility.</li>
+    <li><strong>ACMI + RMIT Games Prize</strong> — annual. No 2026 dates announced yet. Keep on radar.</li>
+    <li><strong>IGDA Melbourne Events</strong> — rolling. Check for the next open call or demo night.</li>`;
+
+  const nextActions = `
+    <li>Submit a speaker proposal to GCAP 2026 immediately (closes COB 15 May — 11 days). Write a 300-word abstract for a talk like "Designing for Emotional Literacy: What Mobile Games Can Teach Us About Feeling." Free to submit, $200 AUD if accepted, and it's in Melbourne.</li>
+    <li>Check your IEEE CoG 2026 notification — results were due 1 May 2026.</li>
+    <li>Check your Meaningful Play 2026 submission — deadline is 15 May. If a playable build or video is available, update your submission before that date.</li>
+    <li>Start drafting the CHI PLAY 2026 Student Game Design Competition paper — deadline 3 June. Up to 8 pages + 3-min video. Begin with a framing of Library of Emotions as an HCI research prototype and reach out to your supervisor about co-authorship.</li>
+    <li>Watch PAX Aus Indie Showcase daily — check <a href="https://aus.paxsite.com" ${linkStyle}>aus.paxsite.com</a> every few days. Applications expected to go live any week in May.</li>
+    <li>Monitor <a href="https://studentgamesfestival.com" ${linkStyle}>studentgamesfestival.com</a> — International Student Games Festival Warsaw submissions are expected to open in June. Calendar a reminder for 1 June.</li>
+    <li>Subscribe to Frosty Games mailing list at <a href="https://frostygamesfest.beehiiv.com" ${linkStyle}>frostygamesfest.beehiiv.com</a> so you're notified when Frosty Mini December 2026 opens.</li>`;
+
+  return `
+<h2 style="font-size:22px;margin-bottom:8px;color:#1f1a17">🔍 Dissemination Digest — Library of Emotions</h2>
+<p>Hi ${firstName}, here is your biweekly dissemination digest for the cycle of ${todayHuman}. I reviewed the How To Market A Game festival list, and researched new current opportunities online.</p>
+<p style="color:#6b6259;font-size:14px">All opportunities below were filtered for relevance, active or upcoming deadlines, and eligibility for Australian or international applicants.</p>
+
+<h3>🌟 High priority — strongest matches</h3>
+<p style="color:#6b6259;font-size:13px;font-style:italic;margin:-8px 0 12px">Strongest matches for Library of Emotions and your current research/practice.</p>
+<ol style="padding-left:20px">${high}</ol>
+
+<h3>📋 Worth reviewing — medium-fit</h3>
+<ol start="5" style="padding-left:20px">${medium}</ol>
+
+<h3>⚠️ Urgent — closing within 14 days</h3>
+<ul style="padding-left:20px">${urgent}</ul>
+
+<h3>🕒 Opening soon / watchlist</h3>
+<ul style="padding-left:20px">${soon}</ul>
+
+<h3>🧭 Suggested next actions</h3>
+<ol style="padding-left:20px">${nextActions}</ol>
+
+<h3>📊 Summary</h3>
+<ul style="padding-left:20px">
+  <li>Total new opportunities found this cycle: 5</li>
+  <li>High priority opportunities: 4 (GCAP, CHI PLAY, Meaningful Play, PAX Aus)</li>
+  <li>Medium priority opportunities: 5</li>
+  <li>Urgent (closing within 14 days): 2 (GCAP — 15 May, Meaningful Play check — 15 May)</li>
+</ul>
+
+<p style="margin-top:24px">Please reply with feedback about:</p>
+<ul style="padding-left:20px">
+  <li>Which opportunities you want to apply to next</li>
+  <li>Which ones are not relevant</li>
+  <li>Any new themes or search terms to add for next cycle</li>
+</ul>
+<p>This will help me improve the next digest.</p>`;
+}
+
 // PHASE 2: reused by the recurring tier.
 export async function sendDigest(env, toEmail, html, subject) {
   const payload = {
@@ -472,7 +664,7 @@ export async function sendDigest(env, toEmail, html, subject) {
   }
 }
 
-function wrapEmail(innerHtml, siteUrl) {
+export function wrapEmail(innerHtml, siteUrl) {
   const safeSite = siteUrl || "the form";
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#fdf8f3;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1f1a17;">

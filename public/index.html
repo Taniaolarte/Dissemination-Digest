@@ -326,7 +326,10 @@
 
     <!-- STEP 1 — Your project -->
     <div class="step card" data-step="1">
-      <h2 id="step1Title">What are you making?</h2>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
+        <h2 id="step1Title" style="margin:0">What are you making?</h2>
+        <button type="button" id="fillExample" class="ghost" style="font-size:13px;color:var(--accent);text-decoration:underline;padding:4px 6px;white-space:nowrap">✨ Fill with example</button>
+      </div>
       <p class="sub" id="step1Sub">Start with the basics.</p>
 
       <div class="field">
@@ -363,10 +366,17 @@
         </div>
       </div>
 
-      <div class="field">
-        <label class="lbl" for="location">Location <span class="req">*</span></label>
-        <input id="location" name="location" type="text" placeholder="e.g. Melbourne, Australia" required>
-        <p class="help">Include your country.</p>
+      <div class="grid-2">
+        <div class="field">
+          <label class="lbl" for="location">Location <span class="req">*</span></label>
+          <input id="location" name="location" type="text" placeholder="e.g. Melbourne, Australia" required>
+          <p class="help">Where you currently live.</p>
+        </div>
+        <div class="field">
+          <label class="lbl" for="citizenship">Country of citizenship <span class="req">*</span></label>
+          <input id="citizenship" name="citizenship" type="text" placeholder="e.g. Colombia" required>
+          <p class="help">Used for eligibility filtering.</p>
+        </div>
       </div>
 
       <div class="field">
@@ -458,13 +468,15 @@
     <span class="price">$0</span>
   </button>
 
-  <!-- Recurring upsell -->
-  <div class="recurring-intro">
-    <h3>Ensure half a year of preparation for success.</h3>
-    <p id="recurringSub">Tick off all your goals for your semester — pick how often you'd like a fresh digest delivered.</p>
-  </div>
+  <!-- Recurring upsell — temporarily hidden behind a blur until paid tiers launch -->
+  <div class="recurring-wrap" style="position:relative;margin-bottom:22px">
+    <div style="filter:blur(6px) saturate(.6);pointer-events:none;user-select:none;opacity:.55">
+      <div class="recurring-intro">
+        <h3>Ensure half a year of preparation for success.</h3>
+        <p id="recurringSub">Tick off all your goals for your semester — pick how often you'd like a fresh digest delivered.</p>
+      </div>
 
-  <div class="tiers" id="tiers" role="radiogroup" aria-label="Cadence">
+      <div class="tiers" id="tiers" role="radiogroup" aria-label="Cadence" aria-hidden="true">
     <button class="tier locked" type="button" data-tier="monthly" data-price="$7.99 for 6 months" data-cadence="Monthly">
       <span class="lock-badge">🔒 SOON</span>
       <span class="emoji">🥤</span>
@@ -497,6 +509,11 @@
       <span class="term">for 6 months</span>
       <span class="label">a dinner out</span>
     </button>
+      </div>
+    </div>
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+      <span style="background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 16px;font-size:13px;font-weight:600;color:var(--muted);box-shadow:0 4px 18px -8px rgba(0,0,0,.18)">🔒 Recurring tiers — coming soon</span>
+    </div>
   </div>
 
   <div class="gate-msg" id="gateMsg" role="status"></div>
@@ -633,6 +650,62 @@
     btn.addEventListener("click", () => applyMode(btn.dataset.mode));
   });
 
+  // ---------- example pre-fill ----------
+  const EXAMPLES = {
+    creative: [
+      {
+        projectName: "Library of Emotions",
+        projectDescription: "An interactive installation that maps personal memories to ambient soundscapes, built with generative AI and physical sensors. Visitors leave behind a fragment that future visitors can hear.",
+        name: "Tania Olarte",
+        location: "Melbourne, Australia",
+        citizenship: "Colombia",
+        career: "Emerging",
+        disciplines: ["Interactive media", "Digital art", "Sound/audio"],
+        themes: "memory, mental health, generative art, archives, intimacy",
+        formats: ["Festivals", "Residencies", "Grants & funding"],
+      },
+      {
+        projectName: "Glass Ear",
+        projectDescription: "A live-performance series exploring deaf and hard-of-hearing audiences' relationships to vibration, architecture and sub-bass. Combines field recordings with tactile floor design.",
+        name: "Jonas Berg",
+        location: "Melbourne, Australia",
+        citizenship: "Germany",
+        career: "Mid-career",
+        disciplines: ["Sound/audio", "Experimental", "Research/academic"],
+        themes: "accessibility, deaf culture, vibration, architecture, performance",
+        formats: ["Festivals", "Conference papers", "Residencies", "Grants & funding"],
+      },
+    ],
+    startup: [
+      {
+        projectName: "Oskoole",
+        projectDescription: "An AI-powered platform that helps schools and educators streamline administration, lesson planning and family communications — turning hours of paperwork into minutes of guided automation.",
+        name: "Tania Olarte",
+        location: "Melbourne, Australia",
+        citizenship: "Colombia",
+        career: "Pre-product",
+        disciplines: ["SaaS", "AI/ML", "Education"],
+        themes: "edtech, school operations, teacher workload, family engagement, AI assistants",
+        formats: ["Accelerators", "Pre-seed grants", "Pitch competitions", "Demo days", "Government R&D grants"],
+      },
+    ],
+  };
+
+  document.getElementById("fillExample").addEventListener("click", () => {
+    const list = EXAMPLES[mode] || EXAMPLES.creative;
+    const ex = list[Math.floor(Math.random() * list.length)];
+    form.projectName.value = ex.projectName;
+    form.projectDescription.value = ex.projectDescription;
+    form.name.value = ex.name;
+    form.location.value = ex.location;
+    form.citizenship.value = ex.citizenship;
+    form.career.value = ex.career;
+    form.themes.value = ex.themes;
+    document.querySelectorAll('input[name="disciplines"]').forEach(i => { i.checked = ex.disciplines.includes(i.value); });
+    document.querySelectorAll('input[name="formats"]').forEach(i => { i.checked = ex.formats.includes(i.value); });
+    clearError();
+  });
+
   function showStep(n){
     current = n;
     steps.forEach(s => s.hidden = (Number(s.dataset.step) !== n));
@@ -672,6 +745,7 @@
     if (n === 2) {
       if (!form.name.value.trim()) return showError("Please tell us your name."), false;
       if (!form.location.value.trim()) return showError("Tell us your location (include your country)."), false;
+      if (!form.citizenship.value.trim()) return showError("Tell us your country of citizenship — it affects eligibility."), false;
       if (!form.career.value) return showError("Pick your " + M.careerLabel.toLowerCase() + "."), false;
       if (checked("disciplines").length === 0) return showError("Pick at least one " + M.disciplinesLabel.toLowerCase().replace(/s$/,"") + "."), false;
     }
@@ -721,6 +795,7 @@
       mode,
       name: form.name.value.trim(),
       location: form.location.value.trim(),
+      citizenship: form.citizenship.value.trim(),
       career: form.career.value,
       projectName: form.projectName.value.trim(),
       projectDescription: form.projectDescription.value.trim(),
@@ -798,7 +873,7 @@
     showStep(3);
   });
 
-  document.getElementById("gateContinue").addEventListener("click", () => {
+  document.getElementById("gateContinue").addEventListener("click", async () => {
     const email = document.getElementById("gateEmail").value.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       gateMsg.innerHTML = "Please enter a valid email so we can deliver your digest.";
@@ -807,8 +882,37 @@
       return;
     }
     if (!pendingDigest) return;
+
+    const btn = document.getElementById("gateContinue");
+    const origText = btn.textContent;
+    btn.textContent = "Sending…";
+    btn.disabled = true;
+    gateMsg.classList.remove("show");
+
+    let emailSent = false;
+    let sendError = "";
+    try {
+      const res = await fetch("/api/send", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email,
+          html: pendingDigest.html,
+          subject: pendingDigest.subject,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.ok) emailSent = true;
+      else sendError = j.error || ("HTTP " + res.status);
+    } catch (err) {
+      sendError = (err && err.message) || "network error";
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+
     gateEl.classList.remove("show");
-    showResult(pendingDigest.html, pendingDigest.subject, pendingDigest.projectName, email);
+    showResult(pendingDigest.html, pendingDigest.subject, pendingDigest.projectName, email, emailSent, sendError);
     pendingDigest = null;
   });
 
@@ -816,12 +920,18 @@
   let lastHtml = "";
   let lastText = "";
 
-  function showResult(html, subject, projectName, email){
+  function showResult(html, subject, projectName, email, emailSent, sendError){
     lastHtml = html;
     document.getElementById("preview").innerHTML = html;
     document.getElementById("resultTitle").textContent = subject || ("Your dissemination digest — " + projectName);
     const sub = document.getElementById("resultSub");
-    if (email) sub.textContent = "Researched just now for " + projectName + ". A copy will be emailed to " + email + " once email delivery is enabled.";
+    if (email && emailSent) {
+      sub.textContent = "Researched just now for " + projectName + ". A copy has been emailed to " + email + ".";
+    } else if (email && sendError) {
+      sub.textContent = "Researched just now for " + projectName + ". (We couldn't email it to " + email + ": " + sendError + " — but your digest is below.)";
+    } else if (email) {
+      sub.textContent = "Researched just now for " + projectName + ".";
+    }
     lastText = htmlToText(document.getElementById("preview"));
     generating.classList.remove("show");
     resultEl.classList.add("show");
