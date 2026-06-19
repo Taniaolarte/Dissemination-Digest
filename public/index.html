@@ -144,9 +144,10 @@
   .error{background:#fdecea;border:1px solid #f3c2bd;color:var(--err);border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:14px;display:none;}
   body[data-mode="startup"] .error{background:#2a1014;border-color:#5a2a30;color:#ff8a80}
 
-  /* ---------- generating screen ---------- */
-  .generating{display:none;max-width:560px;margin:0 auto;padding:64px 20px;text-align:center}
-  .generating.show{display:block}
+  /* ---------- generating screen (sponsor takeover, WeTransfer-style) ---------- */
+  .generating{display:none}
+  .generating.show{display:flex;position:fixed;inset:0;z-index:50;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow:auto}
+  .gen-bg{position:absolute;inset:0;z-index:0;background:var(--card);background-size:cover;background-position:center}
   .gen-orb{
     width:80px;height:80px;border-radius:50%;margin:0 auto 24px;
     background:conic-gradient(from 0deg, var(--accent), var(--ink), var(--accent));
@@ -154,9 +155,32 @@
     mask:radial-gradient(circle at center, transparent 50%, #000 52%);
     -webkit-mask:radial-gradient(circle at center, transparent 50%, #000 52%);
   }
+  .gen-inner{
+    position:relative;z-index:2;width:100%;max-width:460px;text-align:center;
+    background:color-mix(in srgb, var(--card) 82%, transparent);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border:1px solid var(--border);border-radius:20px;
+    padding:44px 28px;box-shadow:0 24px 60px -28px rgba(0,0,0,.5);
+  }
   .gen-title{font-size:24px;font-weight:700;margin:0 0 8px}
   .gen-tip{color:var(--muted);min-height:48px;font-size:15px}
   .gen-meta{font-size:13px;color:var(--muted);margin-top:24px}
+  /* sponsor chip — funds the free tier, sits out of the user flow */
+  .gen-sponsor{
+    position:absolute;left:50%;transform:translateX(-50%);bottom:26px;z-index:3;
+    display:inline-flex;align-items:center;gap:10px;max-width:min(92vw,520px);
+    text-decoration:none;color:var(--ink);font-size:13px;
+    background:color-mix(in srgb, var(--card) 88%, transparent);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border:1px solid var(--border);border-radius:999px;padding:9px 14px;
+    box-shadow:0 8px 28px -12px rgba(0,0,0,.45);transition:transform .08s, box-shadow .15s;
+  }
+  .gen-sponsor:hover{transform:translateX(-50%) translateY(-1px);box-shadow:0 12px 32px -12px rgba(0,0,0,.5)}
+  .gen-sponsor-tag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);background:var(--soft);border-radius:999px;padding:3px 8px;flex:none}
+  .gen-sponsor-text{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gen-sponsor-text b{color:var(--ink);font-weight:600}
+  .gen-sponsor-cta{color:var(--accent);font-weight:700;flex:none}
+  @media (max-width:520px){.gen-sponsor-text{white-space:normal}}
 
   /* ---------- gate (email + tiers) ---------- */
   .gate{display:none;max-width:780px;margin:0 auto;padding:32px 20px 64px}
@@ -189,6 +213,8 @@
   .recurring-intro{margin-bottom:14px}
   .recurring-intro h3{font-size:18px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em}
   .recurring-intro p{font-size:14px;color:var(--muted);margin:0}
+  .includes{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-direction:column;gap:6px}
+  .includes li{font-size:13px;color:var(--ink);display:flex;gap:8px;align-items:flex-start;line-height:1.4}
 
   .tiers{
     display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:22px;
@@ -233,6 +259,24 @@
   .preview h2,.preview h3{margin-top:1.2em}
   .preview a{color:var(--accent)}
   .restart{display:inline-block;margin-top:22px;color:var(--muted);background:none;border:0;cursor:pointer;font:inherit;text-decoration:underline}
+
+  /* ---------- sponsor card (result + footer placements) ---------- */
+  .spcard{margin:24px 0 0}
+  .spcard[hidden]{display:none}
+  .spcard-link{display:flex;align-items:center;gap:14px;text-decoration:none;color:var(--ink);
+    background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;
+    box-shadow:0 1px 0 rgba(0,0,0,.02),0 8px 24px -20px rgba(0,0,0,.3);transition:border-color .15s, transform .08s}
+  .spcard-link:hover{border-color:var(--ink);transform:translateY(-1px)}
+  .spcard-thumb{flex:none;width:52px;height:52px;border-radius:10px;background:var(--soft)}
+  .spcard-body{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .spcard-tag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+  .spcard-name{font-weight:700;font-size:15px}
+  .spcard-tagline{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spcard-cta{flex:none;color:var(--accent);font-weight:700;font-size:18px}
+  .spcard--mini{margin:18px auto 0;max-width:440px}
+  .spcard--mini .spcard-thumb{width:40px;height:40px}
+  .spcard--mini .spcard-name{font-size:14px}
+  .spcard-network{min-height:90px;display:flex;align-items:center;justify-content:center}
 
   footer{max-width:900px;margin:0 auto;padding:32px 28px 56px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--border);}
   footer p{margin:0 0 14px}
@@ -439,10 +483,18 @@
 
 <!-- ============ GENERATING ============ -->
 <section class="generating" id="generating">
-  <div class="gen-orb"></div>
-  <p class="gen-title">Building your digest…</p>
-  <p class="gen-tip" id="genTip">Searching for festivals and open calls…</p>
-  <p class="gen-meta">This usually takes 60–120 seconds. Don't close the tab.</p>
+  <div class="gen-bg" id="genBg"></div>
+  <div class="gen-inner">
+    <div class="gen-orb"></div>
+    <p class="gen-title">Building your digest…</p>
+    <p class="gen-tip" id="genTip">Searching for festivals and open calls…</p>
+    <p class="gen-meta">This usually takes 60–120 seconds. Don't close the tab.</p>
+  </div>
+  <a class="gen-sponsor" id="genSponsor" target="_blank" rel="noopener sponsored" hidden>
+    <span class="gen-sponsor-tag" id="genSponsorTag">Sponsored</span>
+    <span class="gen-sponsor-text"><b id="genSponsorName"></b> · <span id="genSponsorTagline"></span></span>
+    <span class="gen-sponsor-cta" aria-hidden="true">→</span>
+  </a>
 </section>
 
 <!-- ============ GATE (email + tier) ============ -->
@@ -474,40 +526,41 @@
       <div class="recurring-intro">
         <h3>Ensure half a year of preparation for success.</h3>
         <p id="recurringSub">Tick off all your goals for your semester — pick how often you'd like a fresh digest delivered.</p>
+        <ul class="includes" id="recurringIncludes"></ul>
       </div>
 
       <div class="tiers" id="tiers" role="radiogroup" aria-label="Cadence" aria-hidden="true">
-    <button class="tier locked" type="button" data-tier="monthly" data-price="$7.99 for 6 months" data-cadence="Monthly">
+    <button class="tier locked" type="button" data-tier="monthly" data-price="$3.99 for 6 months" data-cadence="Monthly">
       <span class="lock-badge">🔒 SOON</span>
       <span class="emoji">🥤</span>
       <span class="cadence">Monthly</span>
-      <span class="price">$7.99</span>
+      <span class="price">$3.99</span>
       <span class="term">for 6 months</span>
-      <span class="label">a frappe coffee</span>
+      <span class="label">a hot chocolate</span>
     </button>
-    <button class="tier locked" type="button" data-tier="fortnightly" data-price="$15 for 6 months" data-cadence="Fortnightly">
+    <button class="tier locked" type="button" data-tier="fortnightly" data-price="$6.99 for 6 months" data-cadence="Fortnightly">
       <span class="lock-badge">🔒 SOON</span>
       <span class="emoji">🍕</span>
       <span class="cadence">Fortnightly</span>
-      <span class="price">$15</span>
+      <span class="price">$6.99</span>
       <span class="term">for 6 months</span>
-      <span class="label">a pizza</span>
+      <span class="label">a slice of pizza</span>
     </button>
-    <button class="tier locked" type="button" data-tier="weekly" data-price="$35.50 for 6 months" data-cadence="Weekly">
+    <button class="tier locked" type="button" data-tier="weekly" data-price="$14.99 for 6 months" data-cadence="Weekly">
       <span class="lock-badge">🔒 SOON</span>
       <span class="emoji">🍱</span>
       <span class="cadence">Weekly</span>
-      <span class="price">$35.50</span>
+      <span class="price">$14.99</span>
       <span class="term">for 6 months</span>
-      <span class="label">lunch with a drink</span>
+      <span class="label">a cheap lunch</span>
     </button>
-    <button class="tier locked" type="button" data-tier="biweekly" data-price="$54.70 for 6 months" data-cadence="Twice a week">
+    <button class="tier locked" type="button" data-tier="biweekly" data-price="$24.99 for 6 months" data-cadence="Twice a week">
       <span class="lock-badge">🔒 SOON</span>
       <span class="emoji">🍽️</span>
       <span class="cadence">Twice a week</span>
-      <span class="price">$54.70</span>
+      <span class="price">$24.99</span>
       <span class="term">for 6 months</span>
-      <span class="label">a dinner out</span>
+      <span class="label">a night out</span>
     </button>
       </div>
     </div>
@@ -535,12 +588,13 @@
     <button id="printBtn" type="button">🖨 Print / Save as PDF</button>
   </div>
   <div class="preview" id="preview"></div>
+  <div class="spcard" id="resultSponsor" hidden></div>
   <button class="restart" id="restartBtn" type="button">← Start over with a different project</button>
 </section>
 
 <footer>
-  <p><strong>Want it on autopilot?</strong> A recurring tier — your digest delivered every week, fortnight or month — is on the way. Support the project and I'll set one up for you.</p>
-  <a class="bmc" href="https://buymeacoffee.com/taniaolarte" target="_blank" rel="noopener">☕ Buy me a hot chocolate</a>
+  <p><strong>Want it on autopilot?</strong> A recurring tier — your digest delivered every week, fortnight or month — is on the way.</p>
+  <div class="spcard spcard--mini" id="footerSponsor" hidden></div>
 </footer>
 
 <script>
@@ -598,6 +652,38 @@
     },
   };
 
+  // Mode-aware pricing. Student/creative is kept much cheaper; the pricier
+  // startup plan helps subsidise it (and both unlock "advanced search").
+  const PRICING = {
+    creative: {
+      intro: "Student pricing — lock in half a year of opportunities. Pick how often you'd like a fresh digest delivered.",
+      includes: [
+        "🔎 Advanced search — more sources and a fuller digest than the free one-off",
+        "📬 Delivered automatically every cycle — no need to fill the form again",
+      ],
+      tiers: {
+        monthly: { price: "$3.99", term: "for 6 months", label: "a hot chocolate" },
+        fortnightly: { price: "$6.99", term: "for 6 months", label: "a slice of pizza" },
+        weekly: { price: "$14.99", term: "for 6 months", label: "a cheap lunch" },
+        biweekly: { price: "$24.99", term: "for 6 months", label: "a night out" },
+      },
+    },
+    startup: {
+      intro: "Lock in two quarters of opportunities. Pick how often you'd like a fresh digest delivered.",
+      includes: [
+        "🔎 Advanced search — more sources and a fuller digest than the free one-off",
+        "📬 Delivered automatically every cycle — no need to fill the form again",
+        "💛 Your subscription helps keep the student plan much cheaper",
+      ],
+      tiers: {
+        monthly: { price: "$14.99", term: "for 6 months", label: "a team lunch" },
+        fortnightly: { price: "$29", term: "for 6 months", label: "a tool you'd expense" },
+        weekly: { price: "$59", term: "for 6 months", label: "a SaaS seat" },
+        biweekly: { price: "$99", term: "for 6 months", label: "a month of coffee runs" },
+      },
+    },
+  };
+
   function applyMode(m){
     mode = m;
     const M = MODES[m];
@@ -621,7 +707,20 @@
     // hero copy
     document.getElementById("heroHl").innerHTML = HERO_COPY[m].hl;
     document.getElementById("heroLede").textContent = HERO_COPY[m].lede;
-    document.getElementById("recurringSub").textContent = HERO_COPY[m].recurringSub;
+
+    // pricing + perks (student vs startup)
+    const P = PRICING[m];
+    document.getElementById("recurringSub").textContent = P.intro;
+    document.getElementById("recurringIncludes").innerHTML =
+      P.includes.map((t) => "<li>" + t + "</li>").join("");
+    document.querySelectorAll(".tier").forEach((btn) => {
+      const t = P.tiers[btn.dataset.tier];
+      if (!t) return;
+      btn.dataset.price = t.price + " " + t.term;
+      btn.querySelector(".price").textContent = t.price;
+      btn.querySelector(".term").textContent = t.term;
+      btn.querySelector(".label").textContent = t.label;
+    });
 
     // toggle UI state
     document.querySelectorAll("#modeToggle button").forEach(b => {
@@ -787,6 +886,153 @@
   }
   function stopTips(){ if (tipTimer) clearInterval(tipTimer); tipTimer = null; }
 
+  // ---------- sponsor slots (fund the free tier; never block the flow) ----------
+  // Three placements: (1) full-bleed wallpaper during the wait — rotates every
+  // 12s like WeTransfer; (2) a card under the finished digest; (3) a small chip
+  // in the footer. By default these show your own house + direct-sponsor ads
+  // (no third party, no cookies — matches the "nothing stored" promise).
+  //
+  // To plug in an ad network for the RESULT-CARD slot, fill AD_CONFIG.network
+  // below (the loading wallpaper + footer always stay house/direct for looks).
+  // These IDs are PUBLIC client-side ids, not server secrets — see the guide.
+  // PHASE 2: paying users skip ads — set SHOW_ADS = false for them.
+  const SHOW_ADS = true;
+
+  const AD_CONFIG = {
+    network: {
+      provider: "",            // "" (house ads only) | "ethicalads" | "adsense"
+      ethicalAdsPublisher: "", // ethicalads.io account, e.g. "oskoole"
+      adsenseClient: "",       // AdSense, e.g. "ca-pub-1234567890123456"
+      adsenseSlot: "",         // AdSense ad-unit slot id, e.g. "1234567890"
+    },
+  };
+
+  // For now the ad space is a single "your brand here" placeholder — it markets
+  // the slot itself until you line up a real sponsor. Add more objects to make
+  // them rotate, or uncomment the house ad below to also promote your own link.
+  // Each: { name, tagline, url, bg } — set `img` for a full-bleed photo, and
+  // `tag` to override the label (defaults to "Sponsored", or "Support" if house).
+  const SPONSORS = [
+    {
+      tag: "Advertise",
+      name: "Your brand here",
+      tagline: "Sponsor a digest — reach focused creators & founders",
+      url: "mailto:hello@oskoole.com?subject=Sponsoring%20Dissemination%20Digest",
+      bg: "linear-gradient(135deg,#7aa2ff 0%,#1e2538 100%)",
+    },
+    // House ad — re-enable any time to also promote your support link:
+    // {
+    //   house: true,
+    //   name: "Dissemination Digest",
+    //   tagline: "Want it on autopilot? Support the project →",
+    //   url: "https://buymeacoffee.com/taniaolarte",
+    //   bg: "linear-gradient(135deg,#c2410c 0%,#1f1a17 100%)",
+    // },
+  ];
+
+  let _lastSponsor = -1;
+  function pickSponsor(){
+    if (!SPONSORS.length) return null;
+    if (SPONSORS.length === 1) return SPONSORS[0];
+    let i;
+    do { i = Math.floor(Math.random() * SPONSORS.length); } while (i === _lastSponsor);
+    _lastSponsor = i;
+    return SPONSORS[i];
+  }
+
+  // (1) Loading wallpaper — rotates while the digest builds.
+  let sponsorTimer = null;
+  function paintLoadingSponsor(){
+    const link = document.getElementById("genSponsor");
+    const s = pickSponsor();
+    if (!s) { link.hidden = true; return; }
+    const bg = document.getElementById("genBg");
+    bg.style.background = s.img
+      ? 'center/cover no-repeat url("' + s.img + '")'
+      : (s.bg || "var(--card)");
+    document.getElementById("genSponsorTag").textContent = s.tag || (s.house ? "Support" : "Sponsored");
+    document.getElementById("genSponsorName").textContent = s.name;
+    document.getElementById("genSponsorTagline").textContent = s.tagline;
+    link.href = s.url;
+    link.hidden = false;
+  }
+  function showSponsor(){
+    stopSponsor();
+    if (!SHOW_ADS) { document.getElementById("genSponsor").hidden = true; return; }
+    paintLoadingSponsor();
+    sponsorTimer = setInterval(paintLoadingSponsor, 12000); // rotate during the wait
+  }
+  function stopSponsor(){ if (sponsorTimer) clearInterval(sponsorTimer); sponsorTimer = null; }
+
+  // (2) result card + (3) footer chip — small inline sponsor cards.
+  function renderSponsorCard(elOrId, opts){
+    const el = typeof elOrId === "string" ? document.getElementById(elOrId) : elOrId;
+    if (!el) return;
+    if (!SHOW_ADS) { el.hidden = true; return; }
+    if (opts && opts.allowNetwork && mountNetworkAd(el)) { el.hidden = false; return; }
+    const s = pickSponsor();
+    if (!s) { el.hidden = true; return; }
+    const thumb = s.img
+      ? "center/cover no-repeat url('" + s.img + "')"
+      : (s.bg || "var(--soft)");
+    el.innerHTML =
+      '<a class="spcard-link" href="' + s.url + '" target="_blank" rel="noopener sponsored">' +
+        '<span class="spcard-thumb" style="background:' + thumb + '"></span>' +
+        '<span class="spcard-body">' +
+          '<span class="spcard-tag">' + (s.tag || (s.house ? "Support" : "Sponsored")) + '</span>' +
+          '<span class="spcard-name">' + s.name + '</span>' +
+          '<span class="spcard-tagline">' + s.tagline + '</span>' +
+        '</span>' +
+        '<span class="spcard-cta" aria-hidden="true">→</span>' +
+      '</a>';
+    el.hidden = false;
+  }
+
+  // Optional ad-network injection (result card only). Returns true if it mounted.
+  function mountNetworkAd(container){
+    const n = AD_CONFIG.network;
+    if (n.provider === "ethicalads" && n.ethicalAdsPublisher) {
+      container.innerHTML = "";
+      const d = document.createElement("div");
+      d.className = "spcard-network";
+      d.setAttribute("data-ea-publisher", n.ethicalAdsPublisher);
+      d.setAttribute("data-ea-type", "image");
+      container.appendChild(d);
+      if (!document.getElementById("ea-js")) {
+        const sc = document.createElement("script");
+        sc.id = "ea-js"; sc.async = true;
+        sc.src = "https://media.ethicalads.io/media/client/ethicalads.min.js";
+        document.head.appendChild(sc);
+      } else if (window.ethicalads) {
+        window.ethicalads.load();
+      }
+      return true;
+    }
+    if (n.provider === "adsense" && n.adsenseClient && n.adsenseSlot) {
+      container.innerHTML = "";
+      if (!document.getElementById("adsense-js")) {
+        const sc = document.createElement("script");
+        sc.id = "adsense-js"; sc.async = true; sc.crossOrigin = "anonymous";
+        sc.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + n.adsenseClient;
+        document.head.appendChild(sc);
+      }
+      const ins = document.createElement("ins");
+      ins.className = "adsbygoogle";
+      ins.style.display = "block";
+      ins.setAttribute("data-ad-client", n.adsenseClient);
+      ins.setAttribute("data-ad-slot", n.adsenseSlot);
+      ins.setAttribute("data-ad-format", "auto");
+      ins.setAttribute("data-full-width-responsive", "true");
+      container.appendChild(ins);
+      try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
+      return true;
+    }
+    return false;
+  }
+
+  // Footer chip is present on every page load.
+  renderSponsorCard("footerSponsor");
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!validateStep(3)) return;
@@ -811,6 +1057,7 @@
     wizard.classList.remove("show");
     generating.classList.add("show");
     startTips();
+    showSponsor();
     window.scrollTo({ top: 0, behavior: "smooth" });
 
     try {
@@ -821,9 +1068,10 @@
       });
       const json = await res.json().catch(() => ({}));
       stopTips();
+      stopSponsor();
       if (res.ok && json.ok && json.html) {
         // stash the digest and route through the gate first
-        pendingDigest = { html: json.html, subject: json.subject, projectName: data.projectName };
+        pendingDigest = { html: json.html, subject: json.subject, projectName: data.projectName, sig: json.sig };
         generating.classList.remove("show");
         gateEl.classList.add("show");
         document.getElementById("gateEmail").focus();
@@ -835,6 +1083,7 @@
       }
     } catch (err) {
       stopTips();
+      stopSponsor();
       generating.classList.remove("show");
       wizard.classList.add("show");
       showError("Network error — please try again. (" + (err && err.message ? err.message : "") + ")");
@@ -899,6 +1148,7 @@
           email,
           html: pendingDigest.html,
           subject: pendingDigest.subject,
+          sig: pendingDigest.sig,
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -933,6 +1183,7 @@
       sub.textContent = "Researched just now for " + projectName + ".";
     }
     lastText = htmlToText(document.getElementById("preview"));
+    renderSponsorCard("resultSponsor", { allowNetwork: true });
     generating.classList.remove("show");
     resultEl.classList.add("show");
     window.scrollTo({ top: 0, behavior: "smooth" });

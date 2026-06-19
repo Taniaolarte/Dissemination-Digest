@@ -25,12 +25,26 @@ export async function onRequest(context) {
     return json({ ok: false, error: "Spam detected" }, 400);
   }
 
+  // Abuse / cost protection. Each digest call spends Anthropic credits, so we
+  // throttle per IP. No-op until a RATE_LIMIT KV namespace is bound (see
+  // wrangler.toml), so the site keeps working before that one-time setup.
+  const rl = await rateLimit(env, request, { key: "digest", limit: 5, windowSec: 3600 });
+  if (!rl.ok) {
+    return json({ ok: false, error: "Too many digests from your network — please wait a little and try again." }, 429);
+  }
+
   const validation = validate(body);
   if (!validation.ok) return json({ ok: false, error: validation.error }, 400);
 
   try {
     const mode = body.mode === "startup" ? "startup" : "creative";
     body.mode = mode;
+
+    // The instant, free digest runs the lean prompt + a small search budget to
+    // keep Anthropic credit usage low. The recurring paid tier (PHASE 2 cron)
+    // will call buildPrompt(body, { advanced: true }) with TIER.advanced for the
+    // full, deeper "advanced search" digest.
+    const tier = TIER.free;
 
     // Local-test mode: if no real Anthropic key is set, return a fake digest so
     // the whole UI flow can be exercised without spending a cent.
@@ -51,8 +65,8 @@ export async function onRequest(context) {
       await new Promise((r) => setTimeout(r, 4000));
       llmHtml = buildMockDigest(body);
     } else {
-      const { system, user } = buildPrompt(body);
-      llmHtml = await callClaude(env, system, user);
+      const { system, user } = buildPrompt(body, { advanced: tier.advanced });
+      llmHtml = await callClaude(env, system, user, tier);
       if (!llmHtml || llmHtml.trim().length < 50) {
         throw new Error("Model returned empty/too-short content");
       }
@@ -62,7 +76,11 @@ export async function onRequest(context) {
     const titleEmoji = mode === "startup" ? "🚀" : "🔍";
     const titleNoun = mode === "startup" ? "Opportunity Digest" : "Dissemination Digest";
     const subject = `${titleEmoji} ${titleNoun} — ${body.projectName} — ${today}${useMock ? " (mock)" : ""}`;
-    return json({ ok: true, html: llmHtml, subject, mode, mock: useMock }, 200);
+
+    // Sign the generated HTML so /api/send only relays digests this server
+    // actually produced (prevents the endpoint being used as an open relay).
+    const sig = await signDigest(env, llmHtml);
+    return json({ ok: true, html: llmHtml, subject, mode, mock: useMock, sig }, 200);
   } catch (err) {
     console.error("digest failed:", err);
     return json({ ok: false, error: (err && err.message) || "Generation failed" }, 500);
@@ -88,16 +106,25 @@ function validate(b) {
 }
 
 function json(obj, status = 200) {
+  // Same-origin only — no permissive CORS header. The form is served from this
+  // same Pages project, so the API never needs to be callable cross-origin.
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "*",
     },
   });
 }
 
 // ---------- background work ----------
+
+// Per-tier generation budget. The free instant digest stays lean to limit
+// Anthropic credit spend; the paid recurring tier ("advanced search") gets the
+// full prompt, more web searches, and room for a longer digest.
+const TIER = {
+  free: { maxTokens: 3500, maxSearches: 2, advanced: false },
+  advanced: { maxTokens: 8000, maxSearches: 5, advanced: true },
+};
 
 // Per-mode wording. The structural prompt below is shared; only the
 // vocabulary and example searches differ.
@@ -169,7 +196,8 @@ const MODES = {
 // PHASE 2: a future cron worker will import buildPrompt() + sendDigest()
 // directly for paying users whose profile already lives in a database, and
 // will skip the form entirely.
-export function buildPrompt(body) {
+export function buildPrompt(body, opts = {}) {
+  const advanced = opts.advanced !== false;
   const today = new Date().toISOString().slice(0, 10);
   const year = new Date().getFullYear();
   const mode = body.mode === "startup" ? "startup" : "creative";
@@ -212,12 +240,76 @@ export function buildPrompt(body) {
     ? `Eligibility constraint to respect: ${body.eligibility.trim()}.`
     : "(no extra eligibility constraint specified)";
 
-  const searchQueriesBlock = M.queryHints(disciplines, themes, country, year, formats, primaryDiscipline)
-    .map((q) => `- ${q}`)
-    .join("\n");
+  const allQueryHints = M.queryHints(disciplines, themes, country, year, formats, primaryDiscipline);
+  // Free digest: only a handful of hints (shorter prompt = fewer input tokens).
+  const queryHints = advanced ? allQueryHints : allQueryHints.slice(0, 6);
+  const searchQueriesBlock = queryHints.map((q) => `- ${q}`).join("\n");
 
+  const searchStance = advanced
+    ? "You use the web_search tool aggressively to find current, real, open"
+    : "You run a few well-targeted web_search queries to find current, real, open";
   const system =
-    `You are a careful research assistant. You run an opportunity search for ${M.article} ${M.role}. You use the web_search tool aggressively to find current, real, open ${M.opportunityNounShort}. You verify deadlines and eligibility before including anything. You output the final result as a single complete HTML email body (no <html> or <body> tags — just the inner content), styled for a friendly newsletter. You never invent opportunities. If a deadline cannot be verified, you exclude the opportunity.`;
+    `You are a careful research assistant. You run an opportunity search for ${M.article} ${M.role}. ${searchStance} ${M.opportunityNounShort}. You verify deadlines and eligibility before including anything. You output the final result as a single complete HTML email body (no <html> or <body> tags — just the inner content), styled for a friendly newsletter. You never invent opportunities. If a deadline cannot be verified, you exclude the opportunity.`;
+
+  // The paid/advanced tier asks for the full five-section digest; the free tier
+  // asks for a much shorter one (fewer items, fewer sections = fewer output
+  // tokens). The plumbing for the paid prompt lives here for the PHASE 2 cron.
+  const advancedStructure = `## Step 4 — Output the HTML email body
+Output a complete HTML email body (no <html> or <body> tags, just the inner content). Use simple inline-styled <div>, <h2>, <h3>, <p>, <ul>, <li>, <a> tags. No external CSS. Mobile-readable, max width 600px container.
+
+Structure:
+
+<h2 style="...">${M.titleEmoji} ${M.titleNoun} — ${body.projectName}</h2>
+<p>Hi ${firstName}, here is your ${M.titleNoun.toLowerCase()}, researched today and filtered for relevance, active or upcoming deadlines, and eligibility for ${country} or international applicants.</p>
+
+<h3>🌟 High priority — strongest matches</h3>
+For each: Name (link), Type, Deadline, Location/format, Why it fits (1–2 sentences), Suggested next step.
+
+<h3>📋 Worth reviewing — medium-fit</h3>
+For each: Name (link), Type, Deadline, Why it may be useful (1 sentence).
+
+<h3>⚠️ Urgent — closing within 14 days</h3>
+For each: Name (link), Deadline, What's needed to apply (1 line).
+
+<h3>🕒 Opening soon / watchlist</h3>
+For each: Name (link), Expected opening or deadline, Why it matters (1 line).
+
+<h3>🧭 Suggested next actions</h3>
+A short numbered list (3–5 items) of what I should do next.
+
+<h3>Summary</h3>
+<ul>
+<li>Total new ${M.opportunityNounShort} found: N</li>
+<li>High priority: N</li>
+<li>Medium priority: N</li>
+<li>Urgent (closing within 14 days): N</li>
+</ul>`;
+
+  const freeStructure = `## Step 4 — Output the HTML email body
+Output a complete HTML email body (no <html> or <body> tags, just the inner content). Use simple inline-styled <h2>, <h3>, <p>, <ul>, <li>, <a> tags. No external CSS. Mobile-readable, max width 600px container.
+
+Keep it short: include at most 5 ${M.opportunityNounShort} total — only the strongest, clearly-eligible ones.
+
+Structure:
+
+<h2 style="...">${M.titleEmoji} ${M.titleNoun} — ${body.projectName}</h2>
+<p>Hi ${firstName}, here is your free ${M.titleNoun.toLowerCase()}, researched today and filtered for relevance, active or upcoming deadlines, and eligibility for ${country} or international applicants.</p>
+
+<h3>🌟 Top matches</h3>
+For each: Name (link), Type, Deadline, Why it fits (1 sentence), Suggested next step.
+
+<h3>⚠️ Closing soon (within 14 days)</h3>
+For each: Name (link), Deadline, What's needed to apply (1 line).
+
+<h3>Summary</h3>
+<ul>
+<li>Total ${M.opportunityNounShort} found: N</li>
+<li>Closing within 14 days: N</li>
+</ul>
+
+<p style="color:#6b6259;font-size:13px;font-style:italic">This is a free one-off digest. The paid tier runs an advanced, deeper search across more sources and delivers a fuller digest automatically every cycle.</p>`;
+
+  const outputStructure = advanced ? advancedStructure : freeStructure;
 
   const user = `Today's date is ${today}.
 
@@ -271,36 +363,7 @@ ${customExclusionsBlock}
 - **Medium Fit** — adjacent but useful.
 - **Low Fit** — a stretch but possible. Include sparingly.
 
-## Step 4 — Output the HTML email body
-Output a complete HTML email body (no <html> or <body> tags, just the inner content). Use simple inline-styled <div>, <h2>, <h3>, <p>, <ul>, <li>, <a> tags. No external CSS. Mobile-readable, max width 600px container.
-
-Structure:
-
-<h2 style="...">${M.titleEmoji} ${M.titleNoun} — ${body.projectName}</h2>
-<p>Hi ${firstName}, here is your ${M.titleNoun.toLowerCase()}, researched today and filtered for relevance, active or upcoming deadlines, and eligibility for ${country} or international applicants.</p>
-
-<h3>🌟 High priority — strongest matches</h3>
-For each: Name (link), Type, Deadline, Location/format, Why it fits (1–2 sentences), Suggested next step.
-
-<h3>📋 Worth reviewing — medium-fit</h3>
-For each: Name (link), Type, Deadline, Why it may be useful (1 sentence).
-
-<h3>⚠️ Urgent — closing within 14 days</h3>
-For each: Name (link), Deadline, What's needed to apply (1 line).
-
-<h3>🕒 Opening soon / watchlist</h3>
-For each: Name (link), Expected opening or deadline, Why it matters (1 line).
-
-<h3>🧭 Suggested next actions</h3>
-A short numbered list (3–5 items) of what I should do next.
-
-<h3>Summary</h3>
-<ul>
-<li>Total new ${M.opportunityNounShort} found: N</li>
-<li>High priority: N</li>
-<li>Medium priority: N</li>
-<li>Urgent (closing within 14 days): N</li>
-</ul>
+${outputStructure}
 
 # Important notes
 - Be selective. Fewer high-quality ${M.opportunityNounShort} is better than many weak matches.
@@ -312,7 +375,7 @@ A short numbered list (3–5 items) of what I should do next.
   return { system, user };
 }
 
-async function callClaude(env, system, user) {
+async function callClaude(env, system, user, tier = TIER.free) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -322,13 +385,13 @@ async function callClaude(env, system, user) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      max_tokens: tier.maxTokens,
       system,
       tools: [
         {
           type: "web_search_20250305",
           name: "web_search",
-          max_uses: 3,
+          max_uses: tier.maxSearches,
         },
       ],
       messages: [{ role: "user", content: user }],
@@ -704,4 +767,94 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// ---------- security helpers (shared with /api/send) ----------
+
+// HMAC key. Prefer a dedicated secret; fall back to other server secrets so the
+// feature works out of the box. Both /api/digest and /api/send run with the
+// same env, so they always resolve the same key.
+function signingSecret(env) {
+  return (
+    env.DIGEST_SIGNING_SECRET ||
+    env.RESEND_API_KEY ||
+    env.ANTHROPIC_API_KEY ||
+    "dev-insecure-secret"
+  );
+}
+
+function b64url(bytes) {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function hmac(secret, data) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(data));
+  return b64url(new Uint8Array(sig));
+}
+
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Returns a short-lived token binding this exact HTML to this server.
+export async function signDigest(env, html) {
+  const expiry = Date.now() + 30 * 60 * 1000; // 30 minutes
+  const sig = await hmac(signingSecret(env), `${expiry}.${html}`);
+  return `${expiry}.${sig}`;
+}
+
+// True only if `token` was produced by signDigest() for this exact HTML and
+// hasn't expired.
+export async function verifyDigest(env, html, token) {
+  if (typeof token !== "string") return false;
+  const dot = token.indexOf(".");
+  if (dot < 1) return false;
+  const expiry = Number(token.slice(0, dot));
+  const sig = token.slice(dot + 1);
+  if (!Number.isFinite(expiry) || Date.now() > expiry) return false;
+  const expected = await hmac(signingSecret(env), `${expiry}.${html}`);
+  return safeEqual(sig, expected);
+}
+
+// Per-IP fixed-window rate limit backed by a KV namespace bound as RATE_LIMIT.
+// Fails open (allows the request) when KV isn't configured, so the site keeps
+// working before that one-time setup — see wrangler.toml.
+export async function rateLimit(env, request, { key, limit, windowSec }) {
+  const kv = env.RATE_LIMIT;
+  if (!kv) return { ok: true, skipped: true };
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  const bucket = `rl:${key}:${ip}`;
+  const now = Date.now();
+  let data;
+  try {
+    data = await kv.get(bucket, "json");
+  } catch {
+    return { ok: true, skipped: true };
+  }
+  if (!data || typeof data.reset !== "number" || now > data.reset) {
+    data = { count: 0, reset: now + windowSec * 1000 };
+  }
+  data.count += 1;
+  if (data.count > limit) {
+    return { ok: false, retryAfter: Math.ceil((data.reset - now) / 1000) };
+  }
+  try {
+    await kv.put(bucket, JSON.stringify(data), { expirationTtl: Math.max(60, windowSec) });
+  } catch {
+    /* best-effort */
+  }
+  return { ok: true };
 }
