@@ -1,3 +1,19 @@
 name = "dissemination-digest"
 compatibility_date = "2025-01-15"
 pages_build_output_dir = "public"
+
+# --- Rate limiting (abuse / cost protection) ---------------------------------
+# /api/digest and /api/send throttle per IP using a KV namespace bound as
+# RATE_LIMIT. Until you create it the limiter is a no-op (fails open), so the
+# site keeps working. To turn it on:
+#
+#   npx wrangler kv namespace create RATE_LIMIT
+#
+# then paste the printed id below and uncomment:
+#
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT"
+# id = "<paste-the-id-here>"
+#
+# (You can also add the binding from the Cloudflare Pages dashboard:
+#  Settings -> Functions -> KV namespace bindings -> variable name RATE_LIMIT.)

@@ -2,3 +2,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 RESEND_API_KEY=re_...
 FROM_EMAIL="Dissemination Bot <digest@yourdomain.com>"
 OWNER_EMAIL=you@yourdomain.com
+# Optional. Secret used to sign digests so /api/send only relays digests this
+# server generated. If left empty it falls back to RESEND_API_KEY. In
+# production set this to a long random string.
+DIGEST_SIGNING_SECRET=
