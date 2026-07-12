@@ -2,6 +2,8 @@
 // POST /api/digest -> runs Claude with web_search, returns the HTML inline.
 // (Email sending is wired up via sendDigest() but currently disabled — see below.)
 
+import { OPPORTUNITIES } from "../../data/opportunities.js";
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -40,11 +42,20 @@ export async function onRequest(context) {
     const mode = body.mode === "startup" ? "startup" : "creative";
     body.mode = mode;
 
-    // The instant, free digest runs the lean prompt + a small search budget to
-    // keep Anthropic credit usage low. The recurring paid tier (PHASE 2 cron)
-    // will call buildPrompt(body, { advanced: true }) with TIER.advanced for the
-    // full, deeper "advanced search" digest.
-    const tier = TIER.free;
+    // The paid "advanced search" tier is unlocked with a password instead of
+    // payment (so the owner can preview the paid research). Wrong password is
+    // rejected; no password at all = the normal free tier.
+    const providedUnlock = typeof body.unlock === "string" ? body.unlock.trim() : "";
+    const unlocked = providedUnlock.length > 0 && providedUnlock === (env.UNLOCK_PASSWORD || "Naibu");
+    if (providedUnlock.length > 0 && !unlocked) {
+      return json({ ok: false, error: "Incorrect password." }, 403);
+    }
+
+    // The instant, free digest is assembled from the curated opportunities DB
+    // and formatted by a cheap model with NO web_search — that keeps Anthropic
+    // credit usage minimal. The recurring paid tier (PHASE 2 cron) will call
+    // buildPrompt(body, { advanced: true }) with TIER.advanced for the full,
+    // deeper live "advanced search" digest.
 
     // Local-test mode: if no real Anthropic key is set, return a fake digest so
     // the whole UI flow can be exercised without spending a cent.
@@ -64,9 +75,34 @@ export async function onRequest(context) {
       // Simulate the latency of a real Claude call so the loading screen behaves.
       await new Promise((r) => setTimeout(r, 4000));
       llmHtml = buildMockDigest(body);
+    } else if (unlocked) {
+      // Advanced (paid) preview: the curated shortlist seeds a deeper live web
+      // search (more sources, longer output) so it reads like the paid tier.
+      const shortlist = selectOpportunities(body, undefined, PAID_SHORTLIST);
+      const { system, user } = buildPrompt(body, { advanced: true, shortlist });
+      llmHtml = await callClaude(env, system, user, {
+        maxTokens: TIER.advanced.maxTokens,
+        maxSearches: TIER.advanced.maxSearches,
+      });
+      if (!llmHtml || llmHtml.trim().length < 50) {
+        throw new Error("Model returned empty/too-short content");
+      }
     } else {
-      const { system, user } = buildPrompt(body, { advanced: tier.advanced });
-      llmHtml = await callClaude(env, system, user, tier);
+      // Free tier: select from the curated DB and let a cheap model rank +
+      // write the digest (no web_search). Fall back to a live web-search digest
+      // only when the DB can't cover this profile (e.g. a discipline outside the
+      // curated Games / Animation / Startups categories).
+      const shortlist = selectOpportunities(body);
+      if (shortlist.length >= FREE_MIN_MATCHES) {
+        const { system, user } = buildFreePrompt(body, shortlist);
+        llmHtml = await callClaude(env, system, user, { model: FREE_MODEL, maxTokens: 3000 });
+      } else {
+        const { system, user } = buildPrompt(body, { advanced: false });
+        llmHtml = await callClaude(env, system, user, {
+          maxTokens: TIER.free.maxTokens,
+          maxSearches: TIER.free.maxSearches,
+        });
+      }
       if (!llmHtml || llmHtml.trim().length < 50) {
         throw new Error("Model returned empty/too-short content");
       }
@@ -75,12 +111,12 @@ export async function onRequest(context) {
     const today = new Date().toISOString().slice(0, 10);
     const titleEmoji = mode === "startup" ? "🚀" : "🔍";
     const titleNoun = mode === "startup" ? "Opportunity Digest" : "Dissemination Digest";
-    const subject = `${titleEmoji} ${titleNoun} — ${body.projectName} — ${today}${useMock ? " (mock)" : ""}`;
+    const subject = `${titleEmoji} ${titleNoun} — ${body.projectName} — ${today}${unlocked ? " (advanced preview)" : ""}${useMock ? " (mock)" : ""}`;
 
     // Sign the generated HTML so /api/send only relays digests this server
     // actually produced (prevents the endpoint being used as an open relay).
     const sig = await signDigest(env, llmHtml);
-    return json({ ok: true, html: llmHtml, subject, mode, mock: useMock, sig }, 200);
+    return json({ ok: true, html: llmHtml, subject, mode, tier: unlocked ? "advanced" : "free", mock: useMock, sig }, 200);
   } catch (err) {
     console.error("digest failed:", err);
     return json({ ok: false, error: (err && err.message) || "Generation failed" }, 500);
@@ -123,8 +159,119 @@ function json(obj, status = 200) {
 // full prompt, more web searches, and room for a longer digest.
 const TIER = {
   free: { maxTokens: 3500, maxSearches: 2, advanced: false },
-  advanced: { maxTokens: 8000, maxSearches: 5, advanced: true },
+  // 16k output room so the deeper 5-section advanced digest completes without
+  // truncating (still within the safe non-streaming ceiling).
+  advanced: { maxTokens: 16000, maxSearches: 5, advanced: true },
 };
+
+// ---------- free tier: curated-DB selection (no web search) ----------
+
+// Cheapest current model — the free tier only selects from a pre-vetted
+// shortlist and writes the HTML, so it doesn't need Sonnet or web search.
+const FREE_MODEL = "claude-haiku-4-5";
+// Below this many DB matches we fall back to a live web-search digest so a
+// profile the curated list can't cover still gets a useful result.
+const FREE_MIN_MATCHES = 3;
+// How many candidates to hand the model. Small = few input tokens.
+const FREE_SHORTLIST = 18;
+// The advanced (paid) preview seeds its live web search with a larger curated set.
+const PAID_SHORTLIST = 25;
+
+// The form's format labels don't map 1:1 to DB Type values, so this is a soft
+// ranking signal (a boost), never a hard filter — better to show an adjacent
+// match than nothing. Keys are lowercased format labels from public/index.html.
+const FORMAT_TO_TYPES = {
+  // creative
+  "festivals": ["Festival"],
+  "showcases & exhibitions": ["Festival", "Other"],
+  "conference papers": ["Paper/Call"],
+  "conference posters": ["Paper/Call"],
+  "wip/late-breaking tracks": ["Paper/Call"],
+  "grants & funding": ["Grant", "Fund/Investment"],
+  "residencies": ["Residency"],
+  "accelerators": ["Accelerator"],
+  "awards & competitions": ["Competition"],
+  "workshops & talks": ["Paper/Call", "Other"],
+  "playtesting": ["Other"],
+  "demos": ["Festival", "Other"],
+  // startup
+  "pre-seed grants": ["Grant"],
+  "pitch competitions": ["Competition"],
+  "demo days": ["Other", "Festival"],
+  "founder fellowships": ["Grant", "Other"],
+  "government r&d grants": ["Grant"],
+  "hackathons": ["Competition"],
+  "conferences": ["Paper/Call"],
+  "incubators": ["Accelerator"],
+  "visa programs": ["Other"],
+  "angel/vc events": ["Fund/Investment"],
+};
+
+const STOPWORDS = new Set([
+  "the","and","for","with","from","that","this","your","our","are","the",
+  "of","to","in","on","at","or","by","is","as","it","my","an","a","open","call",
+]);
+
+function tokenize(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+}
+
+// Filter the curated DB down to eligible, still-open opportunities for this
+// profile, then rank by relevance and return the top FREE_SHORTLIST. Pure
+// (deterministic given `today`) so it can be unit-tested.
+export function selectOpportunities(body, today = new Date().toISOString().slice(0, 10), limit = FREE_SHORTLIST) {
+  const mode = body.mode === "startup" ? "startup" : "creative";
+  const cats = mode === "startup" ? ["startups"] : ["games", "animation"];
+  const country = (body.location || "").split(",").pop().trim().toLowerCase();
+  const citizenship = (body.citizenship || "").trim().toLowerCase();
+
+  const eligible = OPPORTUNITIES.filter((o) => {
+    if (!cats.includes(o.category)) return false;
+    // Drop only opportunities with a concrete deadline already in the past.
+    // A null deadline means rolling / ongoing — keep it.
+    if (o.deadline && o.deadline < today) return false;
+    // Eligibility: international/remote-OK always passes. Otherwise the location
+    // text must mention the applicant's country or citizenship.
+    if (o.intlOk) return true;
+    const loc = (o.location || "").toLowerCase();
+    if (country && loc.includes(country)) return true;
+    if (citizenship && loc.includes(citizenship)) return true;
+    return false;
+  });
+
+  const terms = new Set([
+    ...tokenize(body.themes),
+    ...tokenize((body.disciplines || []).join(" ")),
+    ...tokenize(body.projectDescription),
+  ]);
+  const wantTypes = new Set(
+    (Array.isArray(body.formats) ? body.formats : [])
+      .flatMap((f) => FORMAT_TO_TYPES[String(f).toLowerCase()] || []),
+  );
+
+  const scored = eligible.map((o) => {
+    let score = 0;
+    for (const w of tokenize([o.name, o.notes, o.requirements].join(" "))) {
+      if (terms.has(w)) score += 1; // theme / discipline overlap
+    }
+    if (wantTypes.has(o.type)) score += 3; // format match
+    if (o.intlOk) score += 1; // easier eligibility
+    if (o.deadline) score += 1; // a concrete deadline beats a vague "rolling"
+    return { o, score };
+  });
+
+  // Best score first; break ties by soonest concrete deadline (rolling last).
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return (a.o.deadline || "9999-99-99").localeCompare(b.o.deadline || "9999-99-99");
+  });
+
+  return scored.slice(0, limit).map((s) => s.o);
+}
 
 // Per-mode wording. The structural prompt below is shared; only the
 // vocabulary and example searches differ.
@@ -226,6 +373,13 @@ export function buildPrompt(body, opts = {}) {
     .filter(Boolean);
   const existingSourcesBlock = sources.length
     ? `# Sources I already track\nStart with these, then go beyond them:\n${sources.map((s) => `- ${s}`).join("\n")}\n`
+    : "";
+
+  // Advanced/paid preview seeds the search with a pre-verified curated shortlist,
+  // then asks the model to also search the live web for more.
+  const shortlist = Array.isArray(opts.shortlist) ? opts.shortlist : [];
+  const shortlistBlock = shortlist.length
+    ? `# Pre-verified opportunities from my curated database\nThese are already checked for eligibility and open deadlines. Evaluate each for fit, include the strong matches, and treat them as a starting point — then use web_search to find ADDITIONAL current opportunities beyond this list and to re-confirm these deadlines:\n${shortlist.map((o) => `- ${o.name} — ${o.type} — deadline ${o.deadline || "rolling"} — ${o.url}`).join("\n")}\n`
     : "";
 
   const excludes = String(body.excludes || "")
@@ -332,7 +486,7 @@ ${themesBulleted}
 I am looking for ${M.opportunityNoun} such as:
 ${formatsBulleted}
 
-${existingSourcesBlock}
+${existingSourcesBlock}${shortlistBlock}
 
 # Your job
 
@@ -375,7 +529,125 @@ ${outputStructure}
   return { system, user };
 }
 
-async function callClaude(env, system, user, tier = TIER.free) {
+// Free tier: build the no-web-search prompt. The model is handed a pre-vetted,
+// already-eligible shortlist from the curated DB and only selects + formats —
+// it must not invent opportunities or alter their URLs/deadlines.
+export function buildFreePrompt(body, shortlist) {
+  const today = new Date().toISOString().slice(0, 10);
+  const mode = body.mode === "startup" ? "startup" : "creative";
+  const M = MODES[mode];
+
+  const firstName = (body.name || "").split(/\s+/)[0] || body.name || "";
+  const country = (body.location || "").split(",").pop().trim() || body.location || "";
+  const disciplines = Array.isArray(body.disciplines) ? body.disciplines : [];
+  const themes = String(body.themes || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const topThemes = themes.slice(0, 4).join(", ");
+
+  // Compact numbered catalog — the model may only choose from these entries.
+  const catalog = shortlist
+    .map((o, i) =>
+      [
+        `[${i + 1}] ${o.name}`,
+        `Type: ${o.type}`,
+        `Status: ${o.status || "—"}`,
+        `Deadline: ${o.deadline || "Rolling / no fixed deadline"}`,
+        `Location: ${o.location || "—"}`,
+        `Intl/remote OK: ${o.intlOk ? "yes" : "no"}`,
+        o.prize ? `Funding/prize: ${o.prize}` : null,
+        o.fee ? `Fee: ${o.fee}` : null,
+        o.requirements ? `Requirements: ${o.requirements}` : null,
+        `URL: ${o.url}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    )
+    .join("\n\n");
+
+  const system =
+    `You assemble a friendly ${M.titleNoun.toLowerCase()} for ${M.article} ${M.role}. ` +
+    `You are given a pre-vetted, already-eligible shortlist of real ${M.opportunityNounShort}. ` +
+    `You SELECT and PRESENT from that list only — you never invent ${M.opportunityNounShort}, never add any not in the list, and never change a URL or deadline. ` +
+    `You output a single complete HTML email body (no <html> or <body> tags — just the inner content), styled for a friendly newsletter.`;
+
+  const user = `Today's date is ${today}.
+
+# About me
+- Name: ${body.name}
+- Location: ${body.location}
+- Country of citizenship: ${(body.citizenship || "").trim()}
+- Stage: ${body.career}
+
+# My ${M.practice}
+**${body.projectName}** — ${body.projectDescription}
+
+My work sits across these ${M.disciplinesLabel}:
+${disciplines.map((d) => `- ${d}`).join("\n")}
+
+Themes & focus areas: ${themes.join(", ")}
+
+# Shortlisted ${M.opportunityNounShort} — choose ONLY from these; do not invent or add any others
+${catalog}
+
+# Your job
+1. Pick the best 5 ${M.opportunityNounShort} for me from the shortlist above (fewer if fewer than 5 genuinely fit), prioritising my themes (${topThemes}), my ${M.formatsLabel}, and clearly-open deadlines.
+2. Order them strongest-fit first.
+3. For each, write a one-sentence "why it fits" that references my project or themes. Use the opportunity's exact name, URL, deadline and type from the shortlist — never alter them.
+4. Flag any picked ${M.opportunityNounShort} whose deadline is within 14 days of today.
+
+## Output the HTML email body
+Use simple inline-styled <h2>, <h3>, <p>, <ul>, <li>, <a> tags. No external CSS. Mobile-readable, max width 600px container. Link each opportunity with its exact URL.
+
+Structure:
+
+<h2 style="font-size:22px;margin-bottom:8px;color:#1f1a17">${M.titleEmoji} ${M.titleNoun} — ${body.projectName}</h2>
+<p>Hi ${firstName}, here is your free ${M.titleNoun.toLowerCase()}, filtered for relevance, active or upcoming deadlines, and eligibility for ${country} or international applicants.</p>
+
+<h3>🌟 Top matches</h3>
+For each: Name (link), Type, Deadline, Why it fits (1 sentence), Suggested next step.
+
+<h3>⚠️ Closing soon (within 14 days)</h3>
+For each: Name (link), Deadline, What's needed to apply (1 line). If none qualify, write one short line saying nothing is closing within 14 days.
+
+<h3>Summary</h3>
+<ul>
+<li>Total ${M.opportunityNounShort} shown: N</li>
+<li>Closing within 14 days: N</li>
+</ul>
+
+<p style="color:#6b6259;font-size:13px;font-style:italic">This is a free digest assembled from a curated, regularly-verified list. The paid tier runs a deeper live search across more sources and delivers a fuller digest automatically every cycle.</p>
+
+# Important
+- Output ONLY the HTML email body. No preamble, no explanations, no markdown fences.
+- Include ONLY opportunities from the shortlist above — never invent one or add one not listed.
+- At most 5 ${M.opportunityNounShort} total.`;
+
+  return { system, user };
+}
+
+async function callClaude(env, system, user, opts = {}) {
+  const {
+    model = "claude-sonnet-4-6",
+    maxTokens = 3500,
+    maxSearches = 0, // 0 = no web_search tool (curated-DB formatting calls)
+  } = opts;
+
+  const payload = {
+    model,
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: "user", content: user }],
+  };
+  // Web search is the expensive part of a digest — only the live/advanced tiers
+  // enable it. The free DB tier passes maxSearches: 0 and sends no tools.
+  if (maxSearches > 0) {
+    payload.tools = [
+      { type: "web_search_20250305", name: "web_search", max_uses: maxSearches },
+    ];
+  }
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -383,19 +655,7 @@ async function callClaude(env, system, user, tier = TIER.free) {
       "anthropic-version": "2023-06-01",
       "x-api-key": env.ANTHROPIC_API_KEY,
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: tier.maxTokens,
-      system,
-      tools: [
-        {
-          type: "web_search_20250305",
-          name: "web_search",
-          max_uses: tier.maxSearches,
-        },
-      ],
-      messages: [{ role: "user", content: user }],
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -404,12 +664,42 @@ async function callClaude(env, system, user, tier = TIER.free) {
   }
 
   const data = await res.json();
-  // The model may emit tool_use blocks interleaved with text blocks. We want
-  // only the final assistant-visible text. Concatenate every text block in order.
-  const parts = (data.content || [])
+  return extractDigestHtml(data.content);
+}
+
+// Pull just the final HTML digest out of the model's response. When web_search
+// is enabled the model narrates between searches ("I'll run several searches…",
+// "Now let me filter and score…") as ordinary text blocks, and it sometimes
+// prefaces the final answer with that reasoning too. Keep only the text after
+// the last tool call, then drop anything before the first HTML tag (and any
+// stray markdown fence) so none of that narration leaks into the email.
+export function extractDigestHtml(content) {
+  const blocks = Array.isArray(content) ? content : [];
+
+  // Everything up to and including the model's last tool call is narration
+  // between searches; the real answer is whatever text comes after it.
+  let lastToolIdx = -1;
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i] && blocks[i].type && blocks[i].type !== "text") lastToolIdx = i;
+  }
+
+  let text = blocks
+    .slice(lastToolIdx + 1)
     .filter((b) => b && b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text);
-  return parts.join("\n").trim();
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+  // Strip a leading ```html fence / trailing ``` if the model wrapped it.
+  text = text.replace(/^```(?:html)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+
+  // Drop any reasoning/preamble before the first real HTML tag. Every digest
+  // template opens with a heading (occasionally a wrapping <div>). If the model
+  // still had reasoning in that final block, this removes it.
+  const start = text.search(/<(?:h[1-6]|div|section|table|p)\b/i);
+  if (start > 0) text = text.slice(start).trim();
+
+  return text;
 }
 
 // Local-test mock — used when no real ANTHROPIC_API_KEY is set.

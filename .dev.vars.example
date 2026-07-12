@@ -6,3 +6,8 @@ OWNER_EMAIL=you@yourdomain.com
 # server generated. If left empty it falls back to RESEND_API_KEY. In
 # production set this to a long random string.
 DIGEST_SIGNING_SECRET=
+
+# Optional. Password that unlocks the "advanced search" (paid-preview) digest
+# instead of payment — curated database + a longer live web search. Defaults to
+# "Naibu" when unset. Change it to rotate access.
+UNLOCK_PASSWORD=

@@ -246,6 +246,14 @@
   .gate-msg.show{display:block}
   .gate-msg a{color:var(--accent);font-weight:600}
 
+  /* password unlock for the advanced (paid) preview */
+  .unlock-box{background:var(--soft);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:22px}
+  .unlock-head{font-weight:700;font-size:15px;margin-bottom:4px}
+  .unlock-sub{font-size:13px;color:var(--muted);margin:0 0 12px}
+  .unlock-row{display:flex;gap:8px;flex-wrap:wrap}
+  .unlock-row input{flex:1;min-width:180px}
+  .unlock-row .primary{white-space:nowrap}
+
   /* ---------- result screen ---------- */
   .result{display:none;max-width:760px;margin:0 auto;padding:32px 20px 80px}
   .result.show{display:block}
@@ -566,6 +574,16 @@
     </div>
     <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
       <span style="background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 16px;font-size:13px;font-weight:600;color:var(--muted);box-shadow:0 4px 18px -8px rgba(0,0,0,.18)">🔒 Recurring tiers — coming soon</span>
+    </div>
+  </div>
+
+  <!-- Preview the paid "advanced search" digest — password-unlocked instead of paid -->
+  <div class="unlock-box" id="unlockBox">
+    <div class="unlock-head">🔑 Preview the advanced digest</div>
+    <p class="unlock-sub">Enter the access password to run the deeper paid research — the curated database <em>plus</em> a longer live web search.</p>
+    <div class="unlock-row">
+      <input id="unlockPw" type="password" placeholder="Access password" autocomplete="off">
+      <button class="primary" type="button" id="unlockBtn">Unlock advanced preview →</button>
     </div>
   </div>
 
@@ -1053,6 +1071,7 @@
       excludes: form.excludes.value.trim(),
       website: form.website.value, // honeypot
     };
+    lastFormData = data;
 
     wizard.classList.remove("show");
     generating.classList.add("show");
@@ -1092,6 +1111,7 @@
 
   // ---------- gate (email + tier picker) ----------
   let pendingDigest = null; // { html, subject, projectName }
+  let lastFormData = null;  // the form payload, reused by the advanced-preview unlock
   let selectedTier = "free";
 
   const tierBtns = document.querySelectorAll(".tier");          // 4 paid tiers
@@ -1120,6 +1140,71 @@
     gateEl.classList.remove("show");
     wizard.classList.add("show");
     showStep(3);
+  });
+
+  // ---------- advanced (paid) preview — password unlock ----------
+  document.getElementById("unlockBtn").addEventListener("click", async () => {
+    const pw = document.getElementById("unlockPw").value.trim();
+    if (!pw) {
+      gateMsg.innerHTML = "Enter the access password to preview the advanced digest.";
+      gateMsg.classList.add("show");
+      document.getElementById("unlockPw").focus();
+      return;
+    }
+    if (!lastFormData) {
+      gateMsg.innerHTML = "Please generate a digest first.";
+      gateMsg.classList.add("show");
+      return;
+    }
+
+    const btn = document.getElementById("unlockBtn");
+    const origText = btn.textContent;
+    btn.textContent = "Unlocking…";
+    btn.disabled = true;
+    gateMsg.classList.remove("show");
+
+    // The advanced search takes longer — show the generating screen while it runs.
+    gateEl.classList.remove("show");
+    generating.classList.add("show");
+    startTips();
+    showSponsor();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      const res = await fetch("/api/digest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...lastFormData, unlock: pw }),
+      });
+      const j = await res.json().catch(() => ({}));
+      stopTips();
+      stopSponsor();
+      btn.textContent = origText;
+      btn.disabled = false;
+      generating.classList.remove("show");
+
+      if (res.ok && j.ok && j.html) {
+        pendingDigest = { html: j.html, subject: j.subject, projectName: lastFormData.projectName, sig: j.sig };
+        document.getElementById("unlockPw").value = "";
+        showResult(j.html, j.subject, lastFormData.projectName, "", false, "");
+      } else {
+        gateEl.classList.add("show");
+        gateMsg.innerHTML = (j.error === "Incorrect password.")
+          ? "🔒 Incorrect password — try again."
+          : (j.error || ("Something went wrong (HTTP " + res.status + "). Please try again."));
+        gateMsg.classList.add("show");
+        document.getElementById("unlockPw").focus();
+      }
+    } catch (err) {
+      stopTips();
+      stopSponsor();
+      btn.textContent = origText;
+      btn.disabled = false;
+      generating.classList.remove("show");
+      gateEl.classList.add("show");
+      gateMsg.innerHTML = "Network error — please try again.";
+      gateMsg.classList.add("show");
+    }
   });
 
   document.getElementById("gateContinue").addEventListener("click", async () => {
